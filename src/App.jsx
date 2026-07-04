@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { signUp, signIn, signOutUser } from './authService'
 import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentStatus, getStudentAttempts } from './quizService'
-import { updateDoc, doc } from 'firebase/firestore'
-import { db } from './firebase'
+import { updateDoc, doc, getDoc } from 'firebase/firestore'
+import { db, auth } from './firebase'
+import { onAuthStateChanged } from 'firebase/auth'
 const questionBank = {
   'class8-science': [
     { question: "Which type of fabric absorbs less water and dries faster?", options: ["Cotton", "Wool", "Synthetic", "Silk"], answer: "Synthetic" },
@@ -157,6 +158,7 @@ function getInitials(name) {
 export default function App() {
   const [page, setPage] = useState('signin')
   const [user, setUser] = useState(null)
+  const [authChecking, setAuthChecking] = useState(true)
   const [selectedClass, setSelectedClass] = useState(null)
   const [quizCategory, setQuizCategory] = useState(null)
   const [questions, setQuestions] = useState([])
@@ -190,6 +192,7 @@ const [authError, setAuthError] = useState('')
   const [leaderboardFilter, setLeaderboardFilter] = useState(null)
   const [myPastAttempts, setMyPastAttempts] = useState([])
   const [darkMode, setDarkMode] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   function toggleDarkMode() {
     setDarkMode(prev => {
@@ -209,6 +212,23 @@ const [authForm, setAuthForm] = useState({
     isNewSchool: false
   })
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
+          if (userDoc.exists()) {
+            setUser({ uid: firebaseUser.uid, ...userDoc.data() })
+            setPage('home')
+          }
+        } catch (err) {
+          console.log('Could not restore session:', err)
+        }
+      }
+      setAuthChecking(false)
+    })
+    return () => unsubscribe()
+  }, [])
 useEffect(() => {
     if (page !== 'quiz' || selected) return
     if (timeLeft === 0) {
@@ -498,13 +518,22 @@ async function goNext(finalScore, finalLog) {
           </div>
           <div className="mb-4">
             <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Password</label>
-            <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="password" placeholder="Enter password"
-              value={authForm.password}
-              onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
-              required />
+            <div className="relative">
+              <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 pr-11 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type={showPassword ? 'text' : 'password'} placeholder="Enter password"
+                value={authForm.password}
+                onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
+                required />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
-          <button type="submit" className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:opacity-95" style={{ marginTop: 8 }}>
-            Sign In →
+          <button type="submit" disabled={authLoading} className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:opacity-95 disabled:opacity-60" style={{ marginTop: 8 }}>
+            {authLoading ? 'Signing in...' : 'Sign In →'}
           </button>
         </form>
         <p className="mt-5 text-center text-sm text-gray-400">
@@ -521,6 +550,13 @@ async function goNext(finalScore, finalLog) {
   )
 
   // ── SIGN UP ──
+  if (authChecking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f6fb] dark:bg-gray-950">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 text-2xl animate-pulse">🧠</div>
+      </div>
+    )
+  }
   if (page === 'signup') return (
     <div className="min-h-screen bg-[#f4f6fb] flex items-center justify-center p-6">
       <div className="w-full max-w-[420px] rounded-[20px] border border-[#e8eaf0] bg-white px-10 py-11 shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
@@ -545,10 +581,19 @@ async function goNext(finalScore, finalLog) {
           </div>
           <div className="mb-4">
             <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Password</label>
-            <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="password" placeholder="Create a password"
-              value={authForm.password}
-              onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
-              required />
+            <div className="relative">
+              <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 pr-11 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type={showPassword ? 'text' : 'password'} placeholder="Create a password"
+                value={authForm.password}
+                onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
+                required />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
           <div className="mb-6">
             <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">I am a</label>
@@ -631,13 +676,19 @@ async function goNext(finalScore, finalLog) {
           🧠
         </div>
         <div>
-          <div className="text-base font-bold text-[#1a1a2e] dark:text-white dark:text-white">Prastuti</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
+          <div className="text-base font-bold text-[#1a1a2e] dark:text-white">Prastuti</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {user?.role === 'teacher' ? 'Teacher Dashboard' : 'Quiz Platform'}
           </div>
         </div>
       </div>
       <div className="flex items-center gap-3">
+        {user?.role === 'teacher' && (
+          <div className="hidden items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 sm:flex dark:border-indigo-900 dark:bg-indigo-950">
+            <span className="text-xs text-gray-500 dark:text-gray-400">School code:</span>
+            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{user?.schoolCode}</span>
+          </div>
+        )}
         <button
           onClick={toggleDarkMode}
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-sm transition hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
@@ -746,7 +797,7 @@ async function goNext(finalScore, finalLog) {
           <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">Assign a Quiz</h2>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Pick a quiz and set the time window students can attempt it in</p>
 
-          <div className="rounded-3xl border border-gray-200 bg-white p-8">
+          <div className="rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
             {assignSuccess && (
               <p className={`mb-4 text-sm font-medium ${assignSuccess.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>
                 {assignSuccess}
@@ -754,9 +805,9 @@ async function goNext(finalScore, finalLog) {
             )}
             <form onSubmit={handleCreateAssignment}>
               <div className="mb-4">
-                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Quiz</label>
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Quiz</label>
                 <select
-                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                   value={assignForm.quizId}
                   onChange={e => setAssignForm({ ...assignForm, quizId: e.target.value })}
                   required
@@ -768,20 +819,20 @@ async function goNext(finalScore, finalLog) {
                 </select>
               </div>
               <div className="mb-4">
-                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Available from</label>
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Available from</label>
                 <input
                   type="datetime-local"
-                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
                   value={assignForm.startTime}
                   onChange={e => setAssignForm({ ...assignForm, startTime: e.target.value })}
                   required
                 />
               </div>
               <div className="mb-6">
-                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Available until</label>
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Available until</label>
                 <input
                   type="datetime-local"
-                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
                   value={assignForm.endTime}
                   onChange={e => setAssignForm({ ...assignForm, endTime: e.target.value })}
                   required
