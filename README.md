@@ -11,17 +11,19 @@ https://quiz-website-eta-red.vercel.app
 ## ✨ Features
 ## 📸 Screenshots
 
+## 📸 Screenshots
+
 ### Signup Page
-![Signup Page](screenshots/signup.png)
+![Signup Page](screenshots/signup.png.png)
 
 ### Student Dashboard
-![Student Dashboard](screenshots/studentdashboard.png)
+![Student Dashboard](screenshots/studtdashboard.png.png)
 
 ### Test Assign Page
-![Test Assign Page](screenshots/testassign.png)
+![Test Assign Page](screenshots/testassign.png.png)
 
 ### Analytics Dashboard
-![Analytics Dashboard](screenshots/analitics.png)
+![Analytics Dashboard](screenshots/analytics.png.png)
 
 - User friendly quiz interface
 - Dynamic question handling
