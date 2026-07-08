@@ -3,7 +3,7 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut
 } from 'firebase/auth'
-import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { doc, setDoc, getDoc, getDocs, collection } from 'firebase/firestore'
 import { auth, db } from './firebase'
 
 // SIGN UP — creates auth account + user profile document
@@ -70,6 +70,55 @@ export async function signIn({ email, password }) {
 }
 
 // SIGN OUT
+// SCHOOL SIGNUP — creates auth account + a pending request (not a real school yet)
+export async function requestSchool({ schoolName, contactName, contactPhone, address, email, password, proposedSchoolCode }) {
+  const code = proposedSchoolCode.trim().toUpperCase()
+
+  // Block duplicate school names (case-insensitive)
+  const schoolsSnap = await getDocs(collection(db, 'schools'))
+  const nameTaken = schoolsSnap.docs.some(
+    d => d.data().name.trim().toLowerCase() === schoolName.trim().toLowerCase()
+  )
+  if (nameTaken) {
+    throw new Error('A school with this name is already registered.')
+  }
+
+  // Block duplicate proposed codes too
+  const codeSnap = await getDoc(doc(db, 'schools', code))
+  if (codeSnap.exists()) {
+    throw new Error('This school code is already taken. Please choose a different one.')
+  }
+
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+  const user = userCredential.user
+
+  await setDoc(doc(db, 'schoolRequests', user.uid), {
+    schoolName,
+    contactName,
+    contactPhone,
+    address,
+    proposedSchoolCode: code,
+    authUid: user.uid,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  })
+
+  await setDoc(doc(db, 'users', user.uid), {
+    name: contactName,
+    email,
+    role: 'school',
+    schoolCode: code,
+    createdAt: new Date().toISOString()
+  })
+
+  return user
+}
+
+// Check if a school's request has been approved yet
+export async function getSchoolStatus(schoolCode) {
+  const schoolDoc = await getDoc(doc(db, 'schools', schoolCode))
+  return schoolDoc.exists() ? 'approved' : 'pending'
+}
 export async function signOutUser() {
   await firebaseSignOut(auth)
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { signUp, signIn, signOutUser } from './authService'
+import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './authService'
 import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentStatus, getStudentAttempts } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
@@ -209,7 +209,10 @@ const [authForm, setAuthForm] = useState({
     role: 'student',
     schoolCode: '',
     schoolName: '',
-    isNewSchool: false
+    isNewSchool: false,
+    contactPhone: '',
+    address: '',
+    proposedSchoolCode: ''
   })
 
   useEffect(() => {
@@ -218,8 +221,15 @@ const [authForm, setAuthForm] = useState({
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
           if (userDoc.exists()) {
-            setUser({ uid: firebaseUser.uid, ...userDoc.data() })
-            setPage('home')
+            const restoredUser = { uid: firebaseUser.uid, ...userDoc.data() }
+            setUser(restoredUser)
+
+            if (restoredUser.role === 'school') {
+              const status = await getSchoolStatus(restoredUser.schoolCode)
+              setPage(status === 'pending' ? 'schoolStillPending' : 'home')
+            } else {
+              setPage('home')
+            }
           }
         } catch (err) {
           console.log('Could not restore session:', err)
@@ -251,6 +261,27 @@ useEffect(() => {
     return () => clearTimeout(t)
   }, [timeLeft, page, selected])
 
+  async function handleRequestSchool(e) {
+    e.preventDefault()
+    if (authLoading) return
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      await requestSchool({
+        schoolName: authForm.schoolName,
+        contactName: authForm.name,
+        contactPhone: authForm.contactPhone,
+        address: authForm.address,
+        email: authForm.email,
+        password: authForm.password,
+        proposedSchoolCode: authForm.proposedSchoolCode
+      })
+      setPage('schoolPending')
+    } catch (err) {
+      setAuthError(err.message)
+    }
+    setAuthLoading(false)
+  }
 async function handleSignUp(e) {
     e.preventDefault()
     setAuthError('')
@@ -283,6 +314,17 @@ async function handleSignUp(e) {
         email: authForm.email,
         password: authForm.password
       })
+
+      if (loggedInUser.role === 'school') {
+        const status = await getSchoolStatus(loggedInUser.schoolCode)
+        if (status === 'pending') {
+          setUser(loggedInUser)
+          setPage('schoolStillPending')
+          setAuthLoading(false)
+          return
+        }
+      }
+
       setUser(loggedInUser)
       setPage('home')
     } catch (err) {
@@ -557,6 +599,61 @@ async function goNext(finalScore, finalLog) {
       </div>
     )
   }
+  if (page === 'schoolStillPending') return (
+    <div className="min-h-screen bg-[#f4f6fb] flex items-center justify-center p-6">
+      <div className="w-full max-w-[420px] rounded-[20px] border border-[#e8eaf0] bg-white px-10 py-11 text-center shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
+        <div className="mx-auto mb-5 flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-gradient-to-br from-yellow-400 to-orange-500 text-2xl">⏳</div>
+        <h2 className="mb-2 text-2xl font-extrabold text-[#1a1a2e]">Still Under Review</h2>
+        <p className="mb-6 text-sm text-[#666]">
+          Your school registration is still being reviewed. Please check back later — you'll get full access to your dashboard once it's approved.
+        </p>
+        <button
+          onClick={async () => {
+            setAuthLoading(true)
+            const status = await getSchoolStatus(user.schoolCode)
+            if (status === 'approved') {
+              setPage('home')
+            } else {
+              alert('Still pending. Please check back later.')
+            }
+            setAuthLoading(false)
+          }}
+          disabled={authLoading}
+          className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-60"
+        >
+          {authLoading ? 'Checking...' : 'Check Status Again'}
+        </button>
+        <button
+          onClick={() => { setUser(null); setPage('signin') }}
+          className="mt-3 w-full rounded-xl border border-gray-300 bg-white py-4 text-sm font-semibold text-gray-700 transition hover:border-indigo-500 hover:text-indigo-600"
+        >
+          Sign Out
+        </button>
+      </div>
+    </div>
+  )
+  if (page === 'schoolPending') return (
+    <div className="min-h-screen bg-[#f4f6fb] flex items-center justify-center p-6">
+      <div className="w-full max-w-[420px] rounded-[20px] border border-[#e8eaf0] bg-white px-10 py-11 text-center shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
+        <div className="mx-auto mb-5 flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-gradient-to-br from-yellow-400 to-orange-500 text-2xl">⏳</div>
+        <h2 className="mb-2 text-2xl font-extrabold text-[#1a1a2e]">Request Submitted!</h2>
+        <p className="mb-6 text-sm text-[#666]">
+          Your school registration for <strong>{authForm.schoolName}</strong> has been sent for approval.
+          You'll be able to sign in once it's approved — this usually takes a short while.
+        </p>
+        <button
+          onClick={() => {
+            setAuthForm({ name: '', email: '', password: '', role: 'student', schoolCode: '', schoolName: '', isNewSchool: false, contactPhone: '', address: '', proposedSchoolCode: '' })
+            setPage('signin')
+          }}
+          className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+        >
+          Go to Sign In →
+        </button>
+        <p className="mt-4 text-xs text-gray-400">You can come back and sign in anytime to check if you've been approved.</p>
+      </div>
+    </div>
+  )
   if (page === 'signup') return (
     <div className="min-h-screen bg-[#f4f6fb] flex items-center justify-center p-6">
       <div className="w-full max-w-[420px] rounded-[20px] border border-[#e8eaf0] bg-white px-10 py-11 shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
@@ -564,7 +661,7 @@ async function goNext(finalScore, finalLog) {
         <h2 className="mb-1 text-center text-2xl font-extrabold text-[#1a1a2e] dark:text-white">Create account</h2>
         <p className="mb-7 text-center text-sm text-[#888]">Join Prastuti and start your quiz journey</p>
         {authError && <p className="mb-4 text-center text-sm font-medium text-red-500">{authError}</p>}
-        <form onSubmit={handleSignUp}>
+        <form onSubmit={authForm.role === 'school' ? handleRequestSchool : handleSignUp}>
           <div className="mb-4">
             <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Full name</label>
             <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="Your name"
@@ -595,26 +692,69 @@ async function goNext(finalScore, finalLog) {
               </button>
             </div>
           </div>
-          <div className="mb-6">
+         <div className="mb-6">
             <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">I am a</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setAuthForm({ ...authForm, role: 'student' })}
-                className={`rounded-[10px] border-[1.5px] py-3 text-sm font-semibold transition-all duration-200 ${authForm.role === 'student' ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-[#e8eaf0] bg-[#fafafa] text-[#666]'}`}
+                onClick={() => setAuthForm({ ...authForm, role: 'student', isNewSchool: false })}
+                className={`rounded-[10px] border-[1.5px] py-3 text-xs font-semibold transition-all duration-200 ${authForm.role === 'student' ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-[#e8eaf0] bg-[#fafafa] text-[#666]'}`}
               >
                 🎓 Student
               </button>
               <button
                 type="button"
                 onClick={() => setAuthForm({ ...authForm, role: 'teacher' })}
-                className={`rounded-[10px] border-[1.5px] py-3 text-sm font-semibold transition-all duration-200 ${authForm.role === 'teacher' ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-[#e8eaf0] bg-[#fafafa] text-[#666]'}`}
+                className={`rounded-[10px] border-[1.5px] py-3 text-xs font-semibold transition-all duration-200 ${authForm.role === 'teacher' ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-[#e8eaf0] bg-[#fafafa] text-[#666]'}`}
               >
                 📋 Teacher
               </button>
+              <button
+                type="button"
+                onClick={() => setAuthForm({ ...authForm, role: 'school' })}
+                className={`rounded-[10px] border-[1.5px] py-3 text-xs font-semibold transition-all duration-200 ${authForm.role === 'school' ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-[#e8eaf0] bg-[#fafafa] text-[#666]'}`}
+              >
+                🏫 School
+              </button>
             </div>
           </div>
-          {authForm.role === 'teacher' && (
+          {authForm.role === 'school' && (
+            <>
+              <div className="mb-4">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">School name</label>
+                <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="e.g. Prastuti Demo School"
+                  value={authForm.schoolName}
+                  onChange={e => setAuthForm({ ...authForm, schoolName: e.target.value })}
+                  required />
+              </div>
+              <div className="mb-4">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Contact phone number</label>
+                <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="tel" placeholder="e.g. 9876543210"
+                  value={authForm.contactPhone}
+                  onChange={e => setAuthForm({ ...authForm, contactPhone: e.target.value })}
+                  required />
+              </div>
+              <div className="mb-4">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">School address</label>
+                <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="Full address"
+                  value={authForm.address}
+                  onChange={e => setAuthForm({ ...authForm, address: e.target.value })}
+                  required />
+              </div>
+              <div className="mb-6">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Choose a school code</label>
+                <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="e.g. PRASTUTI2026"
+                  value={authForm.proposedSchoolCode}
+                  onChange={e => setAuthForm({ ...authForm, proposedSchoolCode: e.target.value })}
+                  required />
+              </div>
+              <div className="mb-4 rounded-xl bg-yellow-50 p-4 text-xs text-yellow-800">
+                📋 Your school registration will be reviewed before you can access your dashboard. You'll be notified once approved.
+              </div>
+            </>
+          )}
+
+         {authForm.role === 'teacher' && (
             <div className="mb-4">
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -645,17 +785,21 @@ async function goNext(finalScore, finalLog) {
             </div>
           )}
 
-          <div className="mb-6">
-            <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">
-              {authForm.role === 'teacher' && authForm.isNewSchool ? 'Choose a school code' : 'School code'}
-            </label>
-            <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="e.g. PRASTUTI2026"
-              value={authForm.schoolCode}
-              onChange={e => setAuthForm({ ...authForm, schoolCode: e.target.value })}
-              required />
-          </div>
-          <button type="submit" disabled={authLoading} className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:opacity-95 disabled:opacity-60">
-            {authLoading ? 'Creating account...' : 'Create Account →'}
+         {authForm.role !== 'school' && (
+            <div className="mb-6">
+              <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">
+                {authForm.role === 'teacher' && authForm.isNewSchool ? 'Choose a school code' : 'School code'}
+              </label>
+              <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="e.g. PRASTUTI2026"
+                value={authForm.schoolCode}
+                onChange={e => setAuthForm({ ...authForm, schoolCode: e.target.value })}
+                required />
+            </div>
+          )}
+         <button type="submit" disabled={authLoading} className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:opacity-95 disabled:opacity-60">
+            {authLoading
+              ? (authForm.role === 'school' ? 'Submitting request...' : 'Creating account...')
+              : (authForm.role === 'school' ? 'Submit for Approval →' : 'Create Account →')}
           </button>
         </form>
         <p className="mt-5 text-center text-sm text-gray-400">
@@ -663,10 +807,12 @@ async function goNext(finalScore, finalLog) {
           <span onClick={() => { setAuthError(''); setPage('signin') }} className="cursor-pointer font-semibold text-indigo-600 hover:underline">
             Sign In
           </span>
-        </p> 
+        </p>
       </div>
     </div>
   )
+
+  // ── NAVBAR (shared) ──
 
  // ── NAVBAR (shared) ──
   const Navbar = () => (
