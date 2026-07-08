@@ -21,7 +21,7 @@ https://quiz-website-eta-red.vercel.app
 ![Test Assign Page](screenshots/testassign.png)
 
 ### Analytics Dashboard
-![Analytics Dashboard](screenshots/analytics.png)
+![Analytics Dashboard](screenshots/analitics.png)
 
 - User friendly quiz interface
 - Dynamic question handling
