@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './authService'
-import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentStatus, getStudentAttempts } from './quizService'
+import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForClass, getAssignmentStatus, getStudentAttempts, getSchoolInfo } from './quizService'
+import { requestGroup, getTeacherGroupStatus, generateGroupName } from './authService'
+import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejectClassRequest } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -175,10 +177,13 @@ const [authError, setAuthError] = useState('')
   const [quizError, setQuizError] = useState('')
   const [answerLog, setAnswerLog] = useState([])
   const [currentAssignmentId, setCurrentAssignmentId] = useState(null)
+  const [passcodePrompt, setPasscodePrompt] = useState(null)
+  const [passcodeInput, setPasscodeInput] = useState('')
+  const [passcodeError, setPasscodeError] = useState('')
   const [lastAttemptId, setLastAttemptId] = useState(null)
   const [teacherFeedback, setTeacherFeedback] = useState('')
   const [allQuizzes, setAllQuizzes] = useState([])
-  const [assignForm, setAssignForm] = useState({ quizId: '', startTime: '', endTime: '' })
+  const [assignForm, setAssignForm] = useState({ quizId: '', startTime: '', endTime: '', passcode: '' })
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignSuccess, setAssignSuccess] = useState('')
   const [studentAttempts, setStudentAttempts] = useState([])
@@ -191,6 +196,14 @@ const [authError, setAuthError] = useState('')
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [leaderboardFilter, setLeaderboardFilter] = useState(null)
   const [myPastAttempts, setMyPastAttempts] = useState([])
+  const [classRequestForm, setClassRequestForm] = useState({ nameOverride: '', proposedGroupCode: '' })
+  const [classRequestLoading, setClassRequestLoading] = useState(false)
+  const [classRequestError, setClassRequestError] = useState('')
+  const [myClassStatus, setMyClassStatus] = useState(null)
+  const [pendingClassRequests, setPendingClassRequests] = useState([])
+  const [approvedClasses, setApprovedClasses] = useState([])
+  const [schoolDashLoading, setSchoolDashLoading] = useState(false)
+  const [classActionLoading, setClassActionLoading] = useState(null)
   const [darkMode, setDarkMode] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -208,6 +221,8 @@ const [authForm, setAuthForm] = useState({
     password: '',
     role: 'student',
     schoolCode: '',
+    groupCode: '',
+    classLevel: '',
     schoolName: '',
     isNewSchool: false,
     contactPhone: '',
@@ -222,6 +237,12 @@ const [authForm, setAuthForm] = useState({
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
           if (userDoc.exists()) {
             const restoredUser = { uid: firebaseUser.uid, ...userDoc.data() }
+
+            if (restoredUser.schoolCode) {
+              const schoolInfo = await getSchoolInfo(restoredUser.schoolCode)
+              restoredUser.schoolName = schoolInfo?.name || restoredUser.schoolCode
+            }
+
             setUser(restoredUser)
 
             if (restoredUser.role === 'school') {
@@ -293,11 +314,13 @@ async function handleSignUp(e) {
         password: authForm.password,
         role: authForm.role,
         schoolCode: authForm.schoolCode.trim().toUpperCase(),
+        groupCode: authForm.groupCode,
+        classLevel: authForm.classLevel,
         isNewSchool: authForm.role === 'teacher' && authForm.isNewSchool,
         schoolName: authForm.schoolName
       })
       alert('Account created! Please sign in.')
-      setAuthForm({ name: '', email: '', password: '', role: 'student', schoolCode: '', schoolName: '', isNewSchool: false })
+      setAuthForm({ name: '', email: '', password: '', role: 'student', schoolCode: '', groupCode: '', classLevel: '', schoolName: '', isNewSchool: false })
       setPage('signin')
     } catch (err) {
       setAuthError(err.message)
@@ -323,6 +346,12 @@ async function handleSignUp(e) {
           setAuthLoading(false)
           return
         }
+      }
+
+      // Fetch the real school name for anyone with a schoolCode (used in group name generation)
+      if (loggedInUser.schoolCode) {
+        const schoolInfo = await getSchoolInfo(loggedInUser.schoolCode)
+        loggedInUser.schoolName = schoolInfo?.name || loggedInUser.schoolCode
       }
 
       setUser(loggedInUser)
@@ -363,7 +392,7 @@ async function handleSignUp(e) {
 async function loadMyAssignments() {
     setAssignmentsLoading(true)
     try {
-      const assignments = await getAssignmentsForSchool(user.schoolCode)
+      const assignments = await getAssignmentsForClass(user.classCode)
       setMyAssignments(assignments)
       if (Object.keys(allQuizzesLookup).length === 0) {
         const quizzes = await getAllQuizzes()
@@ -377,6 +406,16 @@ async function loadMyAssignments() {
     setAssignmentsLoading(false)
   }
 
+  function handlePasscodeSubmit(e) {
+    e.preventDefault()
+    if (passcodeInput.trim() === passcodePrompt.passcode) {
+      const assignment = passcodePrompt
+      setPasscodePrompt(null)
+      startAssignedQuiz(assignment)
+    } else {
+      setPasscodeError('Incorrect passcode. Ask your teacher for the correct one.')
+    }
+  }
   async function startAssignedQuiz(assignment) {
     setQuizLoading(true)
     setQuizError('')
@@ -415,12 +454,14 @@ async function loadQuizzesForAssign() {
       await createAssignment({
         quizId: assignForm.quizId,
         schoolCode: user.schoolCode,
+        classCode: user.classCode,
         teacherUid: user.uid,
         startTime: assignForm.startTime,
-        endTime: assignForm.endTime
+        endTime: assignForm.endTime,
+        passcode: assignForm.passcode.trim()
       })
       setAssignSuccess('Quiz assigned successfully!')
-      setAssignForm({ quizId: '', startTime: '', endTime: '' })
+      setAssignForm({ quizId: '', startTime: '', endTime: '', passcode: '' })
     } catch (err) {
       setAssignSuccess('Error: ' + err.message)
     }
@@ -449,6 +490,70 @@ async function loadQuizzesForAssign() {
     } catch (err) {
       console.log('Could not save feedback:', err)
     }
+  }
+  async function loadSchoolDashboard() {
+    setSchoolDashLoading(true)
+    try {
+      const [pending, approved] = await Promise.all([
+        getPendingClassRequests(user.schoolCode),
+        getApprovedClasses(user.schoolCode)
+      ])
+      setPendingClassRequests(pending)
+      setApprovedClasses(approved)
+    } catch (err) {
+      console.log('Could not load school dashboard:', err)
+    }
+    setSchoolDashLoading(false)
+  }
+
+  async function handleApproveClass(request) {
+    setClassActionLoading(request.id)
+    try {
+      await approveClassRequest(request)
+      await loadSchoolDashboard()
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
+    setClassActionLoading(null)
+  }
+
+  async function handleRejectClass(requestId) {
+    setClassActionLoading(requestId)
+    try {
+      await rejectClassRequest(requestId)
+      await loadSchoolDashboard()
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
+    setClassActionLoading(null)
+  }
+  async function checkMyClassStatus() {
+    try {
+      const result = await getTeacherGroupStatus(user.uid)
+      setMyClassStatus(result)
+    } catch (err) {
+      console.log('Could not check class status:', err)
+    }
+  }
+
+  async function handleRequestClass(e) {
+    e.preventDefault()
+    setClassRequestError('')
+    setClassRequestLoading(true)
+    try {
+      await requestGroup({
+        teacherUid: user.uid,
+        teacherName: user.name,
+        schoolCode: user.schoolCode,
+        schoolName: user.schoolName || user.schoolCode,
+        proposedGroupCode: classRequestForm.proposedGroupCode,
+        nameOverride: classRequestForm.nameOverride
+      })
+      await checkMyClassStatus()
+    } catch (err) {
+      setClassRequestError(err.message)
+    }
+    setClassRequestLoading(false)
   }
   async function handleSignOut() {
     await signOutUser()
@@ -539,6 +644,7 @@ async function goNext(finalScore, finalLog) {
 
   const timerPercent = (timeLeft / TIME_PER_QUESTION) * 100
   const timerColor = timeLeft > 15 ? '#6366f1' : timeLeft > 10 ? '#f59e0b' : '#ef4444'
+  const generatedGroupName = user ? generateGroupName(user.name, user.schoolName || user.schoolCode) : ''
   const submitted = selected !== null
   const activeCat = quizCategory ? [...subjects.class8, ...subjects.class9].find(s => s.id === quizCategory) : null
 
@@ -785,10 +891,36 @@ async function goNext(finalScore, finalLog) {
             </div>
           )}
 
-         {authForm.role !== 'school' && (
+        {authForm.role === 'student' && (
+            <>
+              <div className="mb-4">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Your Class</label>
+                <select
+                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white"
+                  value={authForm.classLevel}
+                  onChange={e => setAuthForm({ ...authForm, classLevel: e.target.value })}
+                  required
+                >
+                  <option value="">Select your class...</option>
+                  <option value="Class 8">Class 8</option>
+                  <option value="Class 9">Class 9</option>
+                  <option value="Class 10">Class 10</option>
+                </select>
+              </div>
+              <div className="mb-6">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Teacher's group code</label>
+                <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="e.g. PRAKOTNIT"
+                  value={authForm.groupCode}
+                  onChange={e => setAuthForm({ ...authForm, groupCode: e.target.value })}
+                  required />
+                <p className="mt-1.5 text-xs text-gray-500">Ask your teacher for this code</p>
+              </div>
+            </>
+          )}
+          {authForm.role === 'teacher' && (
             <div className="mb-6">
               <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">
-                {authForm.role === 'teacher' && authForm.isNewSchool ? 'Choose a school code' : 'School code'}
+                {authForm.isNewSchool ? 'Choose a school code' : 'School code'}
               </label>
               <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] dark:text-white outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="e.g. PRASTUTI2026"
                 value={authForm.schoolCode}
@@ -851,7 +983,174 @@ async function goNext(finalScore, finalLog) {
     </nav>
   )
   // ── HOME ──
+  // ── HOME (School) ──
+  if (page === 'home' && user?.role === 'school') {
+    if (pendingClassRequests.length === 0 && approvedClasses.length === 0 && !schoolDashLoading) loadSchoolDashboard()
+
+    return (
+      <>
+        <Navbar />
+        <div className="mx-auto max-w-[1000px] px-6 py-9">
+          <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 p-10 text-white">
+            <h1 className="mb-2 text-3xl font-extrabold">School Dashboard 🏫</h1>
+            <p className="text-[15px] opacity-90">Review class requests from teachers at your school.</p>
+          </div>
+
+          <div className="mb-8 grid grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-100 dark:bg-yellow-950">⏳</div>
+              <div className="text-3xl font-extrabold text-[#1a1a2e] dark:text-white">{pendingClassRequests.length}</div>
+              <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">Pending Requests</div>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 dark:bg-green-950">🏛️</div>
+              <div className="text-3xl font-extrabold text-[#1a1a2e] dark:text-white">{approvedClasses.length}</div>
+              <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">Active Classes</div>
+            </div>
+          </div>
+
+          <h2 className="mb-4 text-xl font-extrabold text-[#1a1a2e] dark:text-white">Pending Class Requests</h2>
+
+          {schoolDashLoading && <p className="text-sm text-gray-500">Loading...</p>}
+
+          {!schoolDashLoading && pendingClassRequests.length === 0 && (
+            <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-gray-500 dark:text-gray-400">No pending requests right now.</p>
+            </div>
+          )}
+
+          <div className="mb-8 space-y-3">
+            {pendingClassRequests.map(req => (
+              <div key={req.id} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                <div>
+                  <p className="font-bold text-[#1a1a2e] dark:text-white">{req.className} {req.section}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Requested by {req.requestedByName} · Code: {req.proposedClassCode}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={classActionLoading === req.id}
+                    onClick={() => handleApproveClass(req)}
+                    className="rounded-lg bg-green-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-600 disabled:opacity-50"
+                  >
+                    {classActionLoading === req.id ? '...' : '✓ Approve'}
+                  </button>
+                  <button
+                    disabled={classActionLoading === req.id}
+                    onClick={() => handleRejectClass(req.id)}
+                    className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  >
+                    ✕ Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="mb-4 text-xl font-extrabold text-[#1a1a2e] dark:text-white">Active Classes</h2>
+
+          {!schoolDashLoading && approvedClasses.length === 0 && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-gray-500 dark:text-gray-400">No classes approved yet.</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-4">
+            {approvedClasses.map(c => (
+              <div key={c.id} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                <p className="font-bold text-[#1a1a2e] dark:text-white">{c.className} {c.section}</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Code: {c.id}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </>
+    )
+  }
+
   if (page === 'home' && user?.role === 'teacher') {
+    if (myClassStatus === null) checkMyClassStatus()
+
+    if (!user.classCode) {
+      return (
+        <>
+          <Navbar />
+          <div className="mx-auto max-w-[600px] px-6 py-9">
+            <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 p-10 text-white">
+              <h1 className="mb-2 text-3xl font-extrabold">Welcome, {user?.name?.split(' ')[0]} 👋</h1>
+              <p className="text-[15px] opacity-90">You need a class before you can start teaching. Let's set one up.</p>
+            </div>
+
+            {myClassStatus?.status === 'pending' && (
+              <div className="rounded-3xl border border-yellow-200 bg-yellow-50 p-8 text-center">
+                <div className="mb-3 text-4xl">⏳</div>
+                <h3 className="mb-2 text-lg font-bold text-yellow-800">Class Request Pending</h3>
+                <p className="text-sm text-yellow-700">
+                  Your request for {myClassStatus.className} {myClassStatus.section} (code: {myClassStatus.proposedClassCode}) is waiting for approval from your school.
+                </p>
+                <button
+                  onClick={checkMyClassStatus}
+                  className="mt-4 rounded-xl border border-yellow-300 bg-white px-5 py-2 text-sm font-semibold text-yellow-700 transition hover:bg-yellow-100"
+                >
+                  Check Status Again
+                </button>
+              </div>
+            )}
+
+            {myClassStatus?.status === 'rejected' && (
+              <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Your last request for {myClassStatus.className} {myClassStatus.section} was rejected. You can submit a new request below.
+              </div>
+            )}
+
+            {(myClassStatus?.status === 'none' || myClassStatus?.status === 'rejected') && (
+              <div className="rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
+                <h3 className="mb-2 text-lg font-bold text-[#1a1a2e] dark:text-white">Request Your Group</h3>
+                <div className="mb-5 rounded-xl bg-indigo-50 p-4 dark:bg-indigo-950">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    Your group's <strong>display name</strong> (auto-generated, just for identification): <strong className="text-indigo-600 dark:text-indigo-400">{generatedGroupName}</strong>
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">This name is only shown on dashboards — you don't need to share it with anyone. You only need to leave this field blank unless the name is already taken at your school.</p>
+                </div>
+                {classRequestError && <p className="mb-4 text-sm font-medium text-red-500">{classRequestError}</p>}
+                <form onSubmit={handleRequestClass}>
+                  <div className="mb-4">
+                    <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Override display name (only fill this in if you got a "name already taken" error)</label>
+                    <input
+                      className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                      type="text"
+                      placeholder="Leave blank normally"
+                      value={classRequestForm.nameOverride}
+                      onChange={e => setClassRequestForm({ ...classRequestForm, nameOverride: e.target.value })}
+                    />
+                  </div>
+                  <div className="mb-6">
+                    <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Choose YOUR group's invite code</label>
+                    <input
+                      className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                      type="text" placeholder="e.g. PRAKOTNIT"
+                      value={classRequestForm.proposedGroupCode}
+                      onChange={e => setClassRequestForm({ ...classRequestForm, proposedGroupCode: e.target.value })}
+                      required
+                    />
+                    <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">This is the code you will personally share with all your students — they'll type this exact code when signing up, regardless of which class (8/9/10) or subject they're in.</p>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={classRequestLoading}
+                    className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-60"
+                  >
+                    {classRequestLoading ? 'Submitting...' : 'Submit Request →'}
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        </>
+      )
+    }
+
     if (studentAttempts.length === 0 && !analyticsLoading) loadTeacherAnalytics()
     if (myAssignments.length === 0 && !assignmentsLoading) loadMyAssignments()
 
@@ -983,6 +1282,18 @@ async function goNext(finalScore, finalLog) {
                   onChange={e => setAssignForm({ ...assignForm, endTime: e.target.value })}
                   required
                 />
+              </div>
+              <div className="mb-6">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Quiz passcode</label>
+                <input
+                  type="text"
+                  className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  placeholder="e.g. 4728"
+                  value={assignForm.passcode}
+                  onChange={e => setAssignForm({ ...assignForm, passcode: e.target.value })}
+                  required
+                />
+                <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">Students will need to enter this before starting the quiz</p>
               </div>
               <button
                 type="submit"
@@ -1214,6 +1525,42 @@ async function goNext(finalScore, finalLog) {
       </>
     )
   }
+  const PasscodeModal = () => {
+    if (!passcodePrompt) return null
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-6">
+        <div className="w-full max-w-[380px] rounded-2xl bg-white p-8 dark:bg-gray-900">
+          <div className="mb-4 text-center text-3xl">🔒</div>
+          <h3 className="mb-1 text-center text-lg font-bold text-[#1a1a2e] dark:text-white">Enter Quiz Passcode</h3>
+          <p className="mb-5 text-center text-sm text-gray-500 dark:text-gray-400">Ask your teacher for the passcode to begin.</p>
+          {passcodeError && <p className="mb-3 text-center text-sm font-medium text-red-500">{passcodeError}</p>}
+          <form onSubmit={handlePasscodeSubmit}>
+            <input
+              autoFocus
+              type="text"
+              className="mb-4 w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-center text-lg tracking-widest text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              placeholder="Enter code"
+              value={passcodeInput}
+              onChange={e => setPasscodeInput(e.target.value)}
+            />
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+            >
+              Unlock Quiz →
+            </button>
+            <button
+              type="button"
+              onClick={() => setPasscodePrompt(null)}
+              className="mt-2 w-full rounded-xl border border-gray-300 bg-white py-3 text-sm font-semibold text-gray-700 transition hover:border-indigo-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
   if (page === 'home') {
     if (myAssignments.length === 0 && !assignmentsLoading) loadMyAssignments()
     if (myPastAttempts.length === 0 && !assignmentsLoading) loadMyPastAttempts()
@@ -1221,6 +1568,7 @@ async function goNext(finalScore, finalLog) {
     return (
       <>
         <Navbar />
+        <PasscodeModal />
         <div className="mx-auto max-w-[1100px] px-6 py-9 dark:bg-gray-950">
           <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 p-10 text-white">
             <h1 className="mb-2 text-3xl font-extrabold">Hello, {user?.name?.split(' ')[0]} 👋</h1>
@@ -1305,7 +1653,7 @@ async function goNext(finalScore, finalLog) {
                   </p>
                   <button
                     disabled={status !== 'open'}
-                    onClick={() => startAssignedQuiz(a)}
+                    onClick={() => { setPasscodePrompt(a); setPasscodeInput(''); setPasscodeError('') }}
                     className="mt-4 w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
                   >
                     {status === 'open' ? 'Start Quiz →' : status === 'upcoming' ? 'Not yet available' : 'Time expired'}
@@ -1722,10 +2070,8 @@ if (page === "quiz") {
           <button onClick={goHome} className="mt-3 w-full rounded-xl border border-gray-300 bg-white py-4 font-semibold text-gray-700 transition hover:border-indigo-500 hover:text-indigo-600">
             Back to Home
           </button>
-        </div>
-
+       </div>
       </div>
-
     </>
   )
 }

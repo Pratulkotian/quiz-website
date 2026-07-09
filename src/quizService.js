@@ -2,6 +2,8 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
+  updateDoc,
   getDoc,
   getDocs,
   query,
@@ -11,6 +13,13 @@ import {
   Timestamp
 } from 'firebase/firestore'
 import { db } from './firebase'
+
+// ── SCHOOL INFO ──
+
+export async function getSchoolInfo(schoolCode) {
+  const snap = await getDoc(doc(db, 'schools', schoolCode))
+  return snap.exists() ? snap.data() : null
+}
 
 // ── QUIZZES ──
 
@@ -30,13 +39,15 @@ export async function getAllQuizzes() {
 
 // ── ASSIGNMENTS (Teacher assigns a quiz with a time window) ──
 
-export async function createAssignment({ quizId, schoolCode, teacherUid, startTime, endTime }) {
+export async function createAssignment({ quizId, schoolCode, classCode, teacherUid, startTime, endTime, passcode }) {
   const ref = await addDoc(collection(db, 'assignments'), {
     quizId,
     schoolCode,
+    classCode,
     assignedBy: teacherUid,
     startTime: Timestamp.fromDate(new Date(startTime)),
     endTime: Timestamp.fromDate(new Date(endTime)),
+    passcode,
     createdAt: Timestamp.now()
   })
   return ref.id
@@ -45,6 +56,12 @@ export async function createAssignment({ quizId, schoolCode, teacherUid, startTi
 // Get all assignments for a school (used by both teacher view + student view)
 export async function getAssignmentsForSchool(schoolCode) {
   const q = query(collection(db, 'assignments'), where('schoolCode', '==', schoolCode))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export async function getAssignmentsForClass(classCode) {
+  const q = query(collection(db, 'assignments'), where('classCode', '==', classCode))
   const snap = await getDocs(q)
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
@@ -132,4 +149,48 @@ export async function getLeaderboard(schoolCode, quizId = null) {
   }
   const snap = await getDocs(q)
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+// ── SCHOOL DASHBOARD (approve/reject class requests) ──
+
+export async function getPendingClassRequests(schoolCode) {
+  const q = query(
+    collection(db, 'classRequests'),
+    where('schoolCode', '==', schoolCode),
+    where('status', '==', 'pending')
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export async function getApprovedClasses(schoolCode) {
+  const q = query(collection(db, 'groups'), where('schoolCode', '==', schoolCode))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export async function approveClassRequest(request) {
+  // Create the real group document
+  await setDoc(doc(db, 'groups', request.proposedGroupCode), {
+    schoolCode: request.schoolCode,
+    groupName: request.proposedGroupName,
+    createdBy: request.requestedBy,
+    approvedAt: new Date().toISOString()
+  })
+
+  // Give the teacher their groupCode
+  await updateDoc(doc(db, 'users', request.requestedBy), {
+    groupCode: request.proposedGroupCode
+  })
+
+  // Mark the request as approved
+  await updateDoc(doc(db, 'classRequests', request.id), {
+    status: 'approved'
+  })
+}
+
+export async function rejectClassRequest(requestId) {
+  await updateDoc(doc(db, 'classRequests', requestId), {
+    status: 'rejected'
+  })
 }
