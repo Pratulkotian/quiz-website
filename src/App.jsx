@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './authService'
-import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForClass, getAssignmentStatus, getStudentAttempts, getSchoolInfo } from './quizService'
+import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo } from './quizService'
 import { requestGroup, getTeacherGroupStatus, generateGroupName } from './authService'
 import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejectClassRequest } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
@@ -392,7 +392,8 @@ async function handleSignUp(e) {
 async function loadMyAssignments() {
     setAssignmentsLoading(true)
     try {
-      const assignments = await getAssignmentsForClass(user.classCode)
+      const allGroupAssignments = await getAssignmentsForGroup(user.groupCode)
+      const assignments = allGroupAssignments.filter(a => a.targetClassLevel === user.classLevel)
       setMyAssignments(assignments)
       if (Object.keys(allQuizzesLookup).length === 0) {
         const quizzes = await getAllQuizzes()
@@ -451,14 +452,17 @@ async function loadQuizzesForAssign() {
     setAssignLoading(true)
     setAssignSuccess('')
     try {
+      const selectedQuiz = allQuizzes.find(q => q.id === assignForm.quizId)
       await createAssignment({
         quizId: assignForm.quizId,
         schoolCode: user.schoolCode,
-        classCode: user.classCode,
+        groupCode: user.groupCode,
         teacherUid: user.uid,
         startTime: assignForm.startTime,
         endTime: assignForm.endTime,
-        passcode: assignForm.passcode.trim()
+        passcode: assignForm.passcode.trim(),
+        targetClassLevel: selectedQuiz?.className,
+        targetSubject: selectedQuiz?.subject
       })
       setAssignSuccess('Quiz assigned successfully!')
       setAssignForm({ quizId: '', startTime: '', endTime: '', passcode: '' })
@@ -1072,7 +1076,7 @@ async function goNext(finalScore, finalLog) {
   if (page === 'home' && user?.role === 'teacher') {
     if (myClassStatus === null) checkMyClassStatus()
 
-    if (!user.classCode) {
+    if (!user.groupCode) {
       return (
         <>
           <Navbar />
@@ -1262,6 +1266,11 @@ async function goNext(finalScore, finalLog) {
                     <option key={q.id} value={q.id}>{q.className} — {q.subject}</option>
                   ))}
                 </select>
+                {assignForm.quizId && (
+                  <p className="mt-1.5 text-xs text-indigo-600 dark:text-indigo-400">
+                    This will only be visible to your <strong>{allQuizzes.find(q => q.id === assignForm.quizId)?.className}</strong> students studying <strong>{allQuizzes.find(q => q.id === assignForm.quizId)?.subject}</strong>.
+                  </p>
+                )}
               </div>
               <div className="mb-4">
                 <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Available from</label>

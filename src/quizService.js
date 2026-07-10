@@ -39,15 +39,17 @@ export async function getAllQuizzes() {
 
 // ── ASSIGNMENTS (Teacher assigns a quiz with a time window) ──
 
-export async function createAssignment({ quizId, schoolCode, classCode, teacherUid, startTime, endTime, passcode }) {
+export async function createAssignment({ quizId, schoolCode, groupCode, teacherUid, startTime, endTime, passcode, targetClassLevel, targetSubject }) {
   const ref = await addDoc(collection(db, 'assignments'), {
     quizId,
     schoolCode,
-    classCode,
+    groupCode,
     assignedBy: teacherUid,
     startTime: Timestamp.fromDate(new Date(startTime)),
     endTime: Timestamp.fromDate(new Date(endTime)),
     passcode,
+    targetClassLevel,
+    targetSubject,
     createdAt: Timestamp.now()
   })
   return ref.id
@@ -60,8 +62,8 @@ export async function getAssignmentsForSchool(schoolCode) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
-export async function getAssignmentsForClass(classCode) {
-  const q = query(collection(db, 'assignments'), where('classCode', '==', classCode))
+export async function getAssignmentsForGroup(groupCode) {
+  const q = query(collection(db, 'assignments'), where('groupCode', '==', groupCode))
   const snap = await getDocs(q)
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
