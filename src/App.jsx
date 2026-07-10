@@ -4,6 +4,8 @@ import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttem
 import { requestGroup, getTeacherGroupStatus, generateGroupName } from './authService'
 import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejectClassRequest } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
+import VideoTeacherView from './VideoTeacherView'
+import VideoStudentView from './VideoStudentView'
 import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 const questionBank = {
@@ -1428,12 +1430,43 @@ async function goNext(finalScore, finalLog) {
               <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">Search a student and view their full profile</p>
             </div>
           </button>
+
+          <button
+            onClick={() => setPage('videosTeacher')}
+            className="overflow-hidden rounded-3xl border border-gray-200 bg-white text-left transition duration-200 hover:-translate-y-1 hover:border-indigo-500 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900"
+          >
+            <div className="flex h-28 items-center bg-gradient-to-br from-red-500 to-orange-500 px-8">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-3xl">🎬</div>
+            </div>
+            <div className="p-8">
+              <h3 className="text-xl font-extrabold text-[#1a1a2e] dark:text-white">Videos</h3>
+              <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">Add and manage video lessons for your students</p>
+            </div>
+          </button>
         </div>
       </div>
     </>
     )
   }
 
+  // ── VIDEOS (Student) ──
+  if (page === 'videosStudent') {
+    return (
+      <>
+        <Navbar />
+        <VideoStudentView user={user} onBack={() => setPage('home')} />
+      </>
+    )
+  }
+  // ── VIDEOS (Teacher) ──
+  if (page === 'videosTeacher') {
+    return (
+      <>
+        <Navbar />
+        <VideoTeacherView user={user} onBack={() => setPage('home')} />
+      </>
+    )
+  }
   // ── STUDENT INFO DASHBOARD (Teacher) ──
   if (page === 'studentInfo') {
     const filteredStudents = groupStudents.filter(s =>
@@ -1822,20 +1855,6 @@ async function goNext(finalScore, finalLog) {
       <>
         <Navbar />
         <div className="mx-auto max-w-[800px] px-6 py-9">
-          <div className="flex gap-2">
-              <button
-                onClick={() => { loadMyPastAttempts(); setPage('myResults') }}
-                className="rounded-xl border-2 border-indigo-500 bg-white px-5 py-3 text-sm font-bold text-indigo-600 transition hover:bg-indigo-50"
-              >
-                📊 My Results
-              </button>
-              <button
-                onClick={() => { loadLeaderboardData(null); setPage('leaderboard') }}
-                className="rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 px-5 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                🏆 Leaderboard
-              </button>
-            </div>
           <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">🏆 Leaderboard</h2>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Top scorers at your school</p>
 
@@ -1987,12 +2006,26 @@ async function goNext(finalScore, finalLog) {
               <h2 className="text-2xl font-extrabold text-[#1a1a2e] dark:text-white">Your Assignments</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">Quizzes your teacher has scheduled for you</p>
             </div>
-            <button
-              onClick={() => { loadLeaderboardData(null); setPage('leaderboard') }}
-              className="rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 px-5 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              🏆 Leaderboard
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { loadMyPastAttempts(); setPage('myResults') }}
+                className="rounded-xl border-2 border-indigo-500 bg-white px-4 py-3 text-sm font-bold text-indigo-600 transition hover:bg-indigo-50"
+              >
+                📊 My Results
+              </button>
+              <button
+                onClick={() => setPage('videosStudent')}
+                className="rounded-xl border-2 border-red-400 bg-white px-4 py-3 text-sm font-bold text-red-500 transition hover:bg-red-50"
+              >
+                🎬 Videos
+              </button>
+              <button
+                onClick={() => { loadLeaderboardData(null); setPage('leaderboard') }}
+                className="rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                🏆 Leaderboard
+              </button>
+            </div>
           </div>
 
          {assignmentsLoading && (
