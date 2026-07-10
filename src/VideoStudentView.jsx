@@ -48,11 +48,11 @@ function getVimeoEmbedUrl(url) {
   } catch {}
   return url
 }
-function getGoogleDriveEmbedUrl(url) {
+function getGoogleDriveDirectUrl(url) {
   try {
     const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
     if (match && match[1]) {
-      return `https://drive.google.com/file/d/${match[1]}/preview`
+      return `https://drive.google.com/uc?export=download&id=${match[1]}`
     }
   } catch {}
   return url
@@ -150,15 +150,12 @@ export default function VideoStudentView({ user, onBack }) {
               />
             </div>
           ) : isGoogleDriveUrl(activeVideo.videoUrl) ? (
-            <div className="rounded-xl bg-gray-50 p-10 text-center dark:bg-gray-800">
-              <div className="mb-4 text-4xl">🎬</div>
-              <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
-                This video is hosted on Google Drive and opens in a new tab for the best playback experience.
-              </p>
-              <a href={activeVideo.videoUrl} target="_blank" rel="noopener noreferrer" className="inline-block rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 px-6 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg">
-                Watch on Google Drive ↗
-              </a>
-            </div>
+            <video
+              className="w-full rounded-xl"
+              src={getGoogleDriveDirectUrl(activeVideo.videoUrl)}
+              controls
+              onEnded={() => handleVideoEnded(activeVideo)}
+            />
           ) : (
             <video
               className="w-full rounded-xl"
@@ -168,7 +165,7 @@ export default function VideoStudentView({ user, onBack }) {
             />
           )}
 
-          {(isYoutubeUrl(activeVideo.videoUrl) || isGoogleDriveUrl(activeVideo.videoUrl) || isStreamableUrl(activeVideo.videoUrl) || isVimeoUrl(activeVideo.videoUrl)) && !completedIds.has(activeVideo.id) && (
+          {(isYoutubeUrl(activeVideo.videoUrl) || isStreamableUrl(activeVideo.videoUrl) || isVimeoUrl(activeVideo.videoUrl)) && !completedIds.has(activeVideo.id) && (
             <button
               onClick={() => handleVideoEnded(activeVideo)}
               className="mt-3 rounded-lg bg-green-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-600"
@@ -178,7 +175,15 @@ export default function VideoStudentView({ user, onBack }) {
           )}
 
           {completedIds.has(activeVideo.id) && (
-            <p className="mt-3 text-sm font-semibold text-green-600">✅ You've completed this video!</p>
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-green-50 p-3 dark:bg-green-950">
+              <p className="text-sm font-semibold text-green-600">✅ You've completed this video!</p>
+              <button
+                onClick={() => { setActiveVideo(null); setTimeout(() => setActiveVideo(activeVideo), 50) }}
+                className="text-xs font-semibold text-green-700 underline hover:text-green-900"
+              >
+                Watch Again
+              </button>
+            </div>
           )}
         </div>
       )}

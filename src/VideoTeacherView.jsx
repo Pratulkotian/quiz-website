@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { uploadVideo, getVideosForTeacher, getVideoProgress } from './videoService'
+import { uploadVideo, getVideosForTeacher, getVideoProgress, deleteVideo } from './videoService'
 
 const CLASS_LEVELS = ['Class 8', 'Class 9', 'Class 10']
 const SUBJECTS = ['Mathematics', 'Science']
@@ -56,6 +56,15 @@ export default function VideoTeacherView({ user, onBack }) {
 
   function getCompletionCount(videoId) {
     return progress.filter(p => p.videoId === videoId).length
+  }
+async function handleDelete(videoId) {
+    if (!confirm('Delete this video? This cannot be undone.')) return
+    try {
+      await deleteVideo(videoId)
+      loadData()
+    } catch (e) {
+      alert('Error deleting video: ' + e.message)
+    }
   }
 
   return (
@@ -117,14 +126,20 @@ export default function VideoTeacherView({ user, onBack }) {
             <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Video Link</label>
             <input
               className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-              placeholder="Paste a YouTube link or Google Drive share link"
+              placeholder="Paste a YouTube or Google Drive link"
               value={form.videoUrl}
               onChange={e => setForm({ ...form, videoUrl: e.target.value })}
               required
             />
-            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-              Upload your video to YouTube (unlisted) or Google Drive first, then paste the share link here.
-            </p>
+            <div className="mt-2 space-y-1.5 rounded-lg bg-indigo-50 p-3 dark:bg-indigo-950">
+              <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">📌 How to get a link:</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                <strong>YouTube:</strong> Upload as "Unlisted", copy the link, paste here.
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                <strong>Own video (from your device):</strong> Upload to Google Drive → right-click → Share → "Anyone with the link" → copy link, paste here.
+              </p>
+            </div>
           </div>
 
           <button
@@ -176,14 +191,15 @@ export default function VideoTeacherView({ user, onBack }) {
                   </div>
                   <p className="mt-1.5 truncate text-xs text-gray-400">{v.videoUrl}</p>
                 </div>
-                <a
-                  href={v.videoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-100"
-                >
-                  Preview ↗
-                </a>
+                
+                  <div className="flex shrink-0 gap-2">
+                  <a href={v.videoUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-100">
+                    Preview ↗
+                  </a>
+                  <button onClick={() => handleDelete(v.id)} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100">
+                    🗑️ Delete
+                  </button>
+                </div>
               </div>
             </div>
           )

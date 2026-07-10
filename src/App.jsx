@@ -6,6 +6,8 @@ import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejec
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
 import VideoTeacherView from './VideoTeacherView'
 import VideoStudentView from './VideoStudentView'
+import NotesTeacherView from './NotesTeacherView'
+import NotesStudentView from './NotesStudentView'
 import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 const questionBank = {
@@ -1443,9 +1445,32 @@ async function goNext(finalScore, finalLog) {
               <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">Add and manage video lessons for your students</p>
             </div>
           </button>
+
+          <button
+            onClick={() => setPage('notesTeacher')}
+            className="overflow-hidden rounded-3xl border border-gray-200 bg-white text-left transition duration-200 hover:-translate-y-1 hover:border-indigo-500 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900"
+          >
+            <div className="flex h-28 items-center bg-gradient-to-br from-yellow-500 to-amber-600 px-8">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-3xl">📄</div>
+            </div>
+            <div className="p-8">
+              <h3 className="text-xl font-extrabold text-[#1a1a2e] dark:text-white">Notes</h3>
+              <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">Upload study notes for your students</p>
+            </div>
+          </button>
         </div>
       </div>
     </>
+    )
+  }
+
+  // ── NOTES (Student) ──
+  if (page === 'notesStudent') {
+    return (
+      <>
+        <Navbar />
+        <NotesStudentView user={user} setPage={setPage} />
+      </>
     )
   }
 
@@ -1455,6 +1480,34 @@ async function goNext(finalScore, finalLog) {
       <>
         <Navbar />
         <VideoStudentView user={user} onBack={() => setPage('home')} />
+      </>
+    )
+  }
+  // ── VIDEOS (Student) ──
+  if (page === 'videosStudent') {
+    return (
+      <>
+        <Navbar />
+        <VideoStudentView user={user} onBack={() => setPage('home')} />
+      </>
+    )
+  }
+  // ── NOTES (Teacher) ──
+  if (page === 'notesTeacher') {
+    return (
+      <>
+        <Navbar />
+        <NotesTeacherView user={user} setPage={setPage} />
+      </>
+    )
+  }
+
+  // ── VIDEOS (Teacher) ──
+  if (page === 'videosTeacher') {
+    return (
+      <>
+        <Navbar />
+        <VideoTeacherView user={user} onBack={() => setPage('home')} />
       </>
     )
   }
@@ -2018,6 +2071,12 @@ async function goNext(finalScore, finalLog) {
                 className="rounded-xl border-2 border-red-400 bg-white px-4 py-3 text-sm font-bold text-red-500 transition hover:bg-red-50"
               >
                 🎬 Videos
+              </button>
+              <button
+                onClick={() => setPage('notesStudent')}
+                className="rounded-xl border-2 border-yellow-500 bg-white px-4 py-3 text-sm font-bold text-yellow-600 transition hover:bg-yellow-50"
+              >
+                📄 Notes
               </button>
               <button
                 onClick={() => { loadLeaderboardData(null); setPage('leaderboard') }}

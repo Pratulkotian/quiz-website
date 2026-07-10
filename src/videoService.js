@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, where, Timestamp, getDoc, doc } from 'firebase/firestore'
+import { collection, addDoc, getDocs, query, where, Timestamp, getDoc, doc, deleteDoc } from 'firebase/firestore'
 import { db } from './firebase'
 
 export async function uploadVideo({ groupCode, targetClassLevel, subject, title, videoUrl, uploadedBy }) {
@@ -52,4 +52,8 @@ export async function getStudentVideoProgress(studentUid) {
   const q = query(collection(db, 'videoProgress'), where('studentUid', '==', studentUid))
   const snap = await getDocs(q)
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export async function deleteVideo(videoId) {
+  await deleteDoc(doc(db, 'videos', videoId))
 }
