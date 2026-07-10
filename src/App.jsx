@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './authService'
-import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo, getStudentsInGroup, updateStudentClassLevel, getTeachersForSchool } from './quizService'
+import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo, getStudentsInGroup, updateStudentClassLevel, getTeachersForSchool, updateLastActive } from './quizService'
 import { requestGroup, getTeacherGroupStatus, generateGroupName } from './authService'
 import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejectClassRequest } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
@@ -348,6 +348,8 @@ async function handleSignUp(e) {
         password: authForm.password
       })
 
+      updateLastActive(loggedInUser.uid)
+
       if (loggedInUser.role === 'school') {
         const status = await getSchoolStatus(loggedInUser.schoolCode)
         if (status === 'pending') {
@@ -616,9 +618,10 @@ async function loadQuizzesForAssign() {
   }
   const [copiedCode, setCopiedCode] = useState(null)
 
-  function copyToClipboard(code) {
-    navigator.clipboard.writeText(code)
-    setCopiedCode(code)
+  function copyInviteMessage(groupCode) {
+    const message = `Join my class on Prastuti! 🎓\n\n1. Go to the Prastuti website\n2. Sign up as a Student\n3. Use this group code: ${groupCode}\n\nSee you there!`
+    navigator.clipboard.writeText(message)
+    setCopiedCode('invite-' + groupCode)
     setTimeout(() => setCopiedCode(null), 2000)
   }
   async function handleSignOut() {
@@ -1051,6 +1054,13 @@ async function goNext(finalScore, finalLog) {
               title="Copy group code"
             >
               {copiedCode === user?.groupCode ? '✓' : '📋'}
+            </button>
+            <button
+              onClick={() => copyInviteMessage(user?.groupCode)}
+              className="text-xs text-indigo-500 hover:text-indigo-700"
+              title="Copy invite message for WhatsApp/students"
+            >
+              {copiedCode === 'invite-' + user?.groupCode ? '✓ Copied!' : '💬 Copy Invite'}
             </button>
           </div>
         )}
@@ -1500,6 +1510,9 @@ async function goNext(finalScore, finalLog) {
               <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
                 <h3 className="text-xl font-extrabold text-[#1a1a2e] dark:text-white">{selectedStudent.name}</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{selectedStudent.email}</p>
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  Last active: {selectedStudent.lastActive?.toDate ? selectedStudent.lastActive.toDate().toLocaleString() : 'Never signed in since tracking began'}
+                </p>
 
                 <div className="mt-4">
                   <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">

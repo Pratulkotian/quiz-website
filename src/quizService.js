@@ -234,3 +234,7 @@ export async function getStudentsInGroup(groupCode) {
 export async function updateStudentClassLevel(studentUid, newClassLevel) {
   await updateDoc(doc(db, 'users', studentUid), { classLevel: newClassLevel })
 }
+
+export async function updateLastActive(uid) {
+  await updateDoc(doc(db, 'users', uid), { lastActive: Timestamp.now() })
+}
