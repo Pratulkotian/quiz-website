@@ -29,6 +29,7 @@ https://quiz-website-eta-red.vercel.app
 - Firebase backend integration
 - Fast performance using Vite
 - Clean modern UI
+- AI generative model
 
 
 ## 🛠️ Tech Stack

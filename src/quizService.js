@@ -196,3 +196,41 @@ export async function rejectClassRequest(requestId) {
     status: 'rejected'
   })
 }
+
+// Get all teachers at a school, with their group info + student count
+export async function getTeachersForSchool(schoolCode) {
+  const teachersQ = query(collection(db, 'users'), where('schoolCode', '==', schoolCode), where('role', '==', 'teacher'))
+  const teachersSnap = await getDocs(teachersQ)
+  const teachers = teachersSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+  const groupsQ = query(collection(db, 'groups'), where('schoolCode', '==', schoolCode))
+  const groupsSnap = await getDocs(groupsQ)
+  const groups = groupsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+  const studentsQ = query(collection(db, 'users'), where('schoolCode', '==', schoolCode), where('role', '==', 'student'))
+  const studentsSnap = await getDocs(studentsQ)
+  const students = studentsSnap.docs.map(d => d.data())
+
+  return teachers.map(teacher => {
+    const group = groups.find(g => g.createdBy === teacher.id)
+    const studentCount = group ? students.filter(s => s.groupCode === group.id).length : 0
+    return {
+      ...teacher,
+      groupCode: group?.id || null,
+      groupName: group?.groupName || null,
+      studentCount
+    }
+  })
+}
+
+// ── STUDENT INFO DASHBOARD (Teacher) ──
+
+export async function getStudentsInGroup(groupCode) {
+  const q = query(collection(db, 'users'), where('groupCode', '==', groupCode), where('role', '==', 'student'))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export async function updateStudentClassLevel(studentUid, newClassLevel) {
+  await updateDoc(doc(db, 'users', studentUid), { classLevel: newClassLevel })
+}

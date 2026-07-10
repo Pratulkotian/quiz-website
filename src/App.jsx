@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './authService'
-import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo } from './quizService'
+import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo, getStudentsInGroup, updateStudentClassLevel, getTeachersForSchool } from './quizService'
 import { requestGroup, getTeacherGroupStatus, generateGroupName } from './authService'
 import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejectClassRequest } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
@@ -186,6 +186,7 @@ const [authError, setAuthError] = useState('')
   const [assignForm, setAssignForm] = useState({ quizId: '', startTime: '', endTime: '', passcode: '' })
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignSuccess, setAssignSuccess] = useState('')
+  const [lastAssignedPasscode, setLastAssignedPasscode] = useState('')
   const [studentAttempts, setStudentAttempts] = useState([])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [feedbackDrafts, setFeedbackDrafts] = useState({})
@@ -204,6 +205,15 @@ const [authError, setAuthError] = useState('')
   const [approvedClasses, setApprovedClasses] = useState([])
   const [schoolDashLoading, setSchoolDashLoading] = useState(false)
   const [classActionLoading, setClassActionLoading] = useState(null)
+  const [groupStudents, setGroupStudents] = useState([])
+  const [studentSearchTerm, setStudentSearchTerm] = useState('')
+  const [selectedStudent, setSelectedStudent] = useState(null)
+  const [selectedStudentAttempts, setSelectedStudentAttempts] = useState([])
+  const [studentDashLoading, setStudentDashLoading] = useState(false)
+  const [classLevelSaving, setClassLevelSaving] = useState(false)
+  const [schoolActiveTab, setSchoolActiveTab] = useState('requests')
+  const [schoolTeachers, setSchoolTeachers] = useState([])
+  const [teachersLoading, setTeachersLoading] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -465,6 +475,7 @@ async function loadQuizzesForAssign() {
         targetSubject: selectedQuiz?.subject
       })
       setAssignSuccess('Quiz assigned successfully!')
+      setLastAssignedPasscode(assignForm.passcode.trim())
       setAssignForm({ quizId: '', startTime: '', endTime: '', passcode: '' })
     } catch (err) {
       setAssignSuccess('Error: ' + err.message)
@@ -494,6 +505,50 @@ async function loadQuizzesForAssign() {
     } catch (err) {
       console.log('Could not save feedback:', err)
     }
+  }
+  async function loadGroupStudents() {
+    setStudentDashLoading(true)
+    try {
+      const students = await getStudentsInGroup(user.groupCode)
+      setGroupStudents(students)
+    } catch (err) {
+      console.log('Could not load students:', err)
+    }
+    setStudentDashLoading(false)
+  }
+
+  async function viewStudentProfile(student) {
+    setSelectedStudent(student)
+    setStudentDashLoading(true)
+    try {
+      const attempts = await getStudentAttempts(student.id)
+      setSelectedStudentAttempts(attempts)
+    } catch (err) {
+      console.log('Could not load student attempts:', err)
+    }
+    setStudentDashLoading(false)
+  }
+
+  async function handleFixClassLevel(newLevel) {
+    setClassLevelSaving(true)
+    try {
+      await updateStudentClassLevel(selectedStudent.id, newLevel)
+      setSelectedStudent({ ...selectedStudent, classLevel: newLevel })
+      setGroupStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, classLevel: newLevel } : s))
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
+    setClassLevelSaving(false)
+  }
+  async function loadSchoolTeachers() {
+    setTeachersLoading(true)
+    try {
+      const teachers = await getTeachersForSchool(user.schoolCode)
+      setSchoolTeachers(teachers)
+    } catch (err) {
+      console.log('Could not load teachers:', err)
+    }
+    setTeachersLoading(false)
   }
   async function loadSchoolDashboard() {
     setSchoolDashLoading(true)
@@ -559,10 +614,17 @@ async function loadQuizzesForAssign() {
     }
     setClassRequestLoading(false)
   }
+  const [copiedCode, setCopiedCode] = useState(null)
+
+  function copyToClipboard(code) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2000)
+  }
   async function handleSignOut() {
     await signOutUser()
     setUser(null)
-    setAuthForm({ name: '', email: '', password: '', role: 'student', schoolCode: '' })
+    setAuthForm({ name: '', email: '', password: '', role: 'student', schoolCode: '', groupCode: '', classLevel: '', schoolName: '', isNewSchool: false, contactPhone: '', address: '', proposedSchoolCode: '' })
     setPage('signin')
   }
 
@@ -948,6 +1010,20 @@ async function goNext(finalScore, finalLog) {
     </div>
   )
 
+  const SkeletonCard = () => (
+    <div className="animate-pulse rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-3 h-10 w-10 rounded-xl bg-gray-200 dark:bg-gray-700"></div>
+      <div className="mb-2 h-6 w-16 rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+  )
+
+  const SkeletonRow = () => (
+    <div className="animate-pulse rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-2 h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div className="h-3 w-1/2 rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+  )
   // ── NAVBAR (shared) ──
 
  // ── NAVBAR (shared) ──
@@ -967,8 +1043,15 @@ async function goNext(finalScore, finalLog) {
       <div className="flex items-center gap-3">
         {user?.role === 'teacher' && (
           <div className="hidden items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 sm:flex dark:border-indigo-900 dark:bg-indigo-950">
-            <span className="text-xs text-gray-500 dark:text-gray-400">School code:</span>
-            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{user?.schoolCode}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Group code:</span>
+            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{user?.groupCode}</span>
+            <button
+              onClick={() => copyToClipboard(user?.groupCode)}
+              className="ml-1 text-xs text-indigo-500 hover:text-indigo-700"
+              title="Copy group code"
+            >
+              {copiedCode === user?.groupCode ? '✓' : '📋'}
+            </button>
           </div>
         )}
         <button
@@ -997,7 +1080,17 @@ async function goNext(finalScore, finalLog) {
         <div className="mx-auto max-w-[1000px] px-6 py-9">
           <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 p-10 text-white">
             <h1 className="mb-2 text-3xl font-extrabold">School Dashboard 🏫</h1>
-            <p className="text-[15px] opacity-90">Review class requests from teachers at your school.</p>
+            <p className="mb-3 text-[15px] opacity-90">Review class requests from teachers at your school.</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs opacity-80">Your school code:</span>
+              <span className="text-sm font-bold">{user?.schoolCode}</span>
+              <button
+                onClick={() => copyToClipboard(user?.schoolCode)}
+                className="text-xs opacity-80 hover:opacity-100"
+              >
+                {copiedCode === user?.schoolCode ? '✓' : '📋'}
+              </button>
+            </div>
           </div>
 
           <div className="mb-8 grid grid-cols-2 gap-4">
@@ -1013,9 +1106,37 @@ async function goNext(finalScore, finalLog) {
             </div>
           </div>
 
+          <div className="mb-6 flex gap-2">
+            <button
+              onClick={() => setSchoolActiveTab('requests')}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${schoolActiveTab === 'requests' ? 'bg-indigo-500 text-white' : 'border border-gray-200 bg-white text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300'}`}
+            >
+              📥 Requests
+            </button>
+            <button
+              onClick={() => setSchoolActiveTab('classes')}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${schoolActiveTab === 'classes' ? 'bg-indigo-500 text-white' : 'border border-gray-200 bg-white text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300'}`}
+            >
+              🏛️ Active Classes
+            </button>
+            <button
+              onClick={() => { setSchoolActiveTab('teachers'); if (schoolTeachers.length === 0) loadSchoolTeachers() }}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${schoolActiveTab === 'teachers' ? 'bg-indigo-500 text-white' : 'border border-gray-200 bg-white text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300'}`}
+            >
+              👩‍🏫 Teachers
+            </button>
+          </div>
+
+          {schoolActiveTab === 'requests' && (
+          <>
           <h2 className="mb-4 text-xl font-extrabold text-[#1a1a2e] dark:text-white">Pending Class Requests</h2>
 
-          {schoolDashLoading && <p className="text-sm text-gray-500">Loading...</p>}
+          {schoolDashLoading && (
+            <div className="mb-8 space-y-3">
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          )}
 
           {!schoolDashLoading && pendingClassRequests.length === 0 && (
             <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
@@ -1052,6 +1173,11 @@ async function goNext(finalScore, finalLog) {
             ))}
           </div>
 
+          </>
+          )}
+
+          {schoolActiveTab === 'classes' && (
+          <>
           <h2 className="mb-4 text-xl font-extrabold text-[#1a1a2e] dark:text-white">Active Classes</h2>
 
           {!schoolDashLoading && approvedClasses.length === 0 && (
@@ -1063,11 +1189,66 @@ async function goNext(finalScore, finalLog) {
           <div className="grid grid-cols-3 gap-4">
             {approvedClasses.map(c => (
               <div key={c.id} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-                <p className="font-bold text-[#1a1a2e] dark:text-white">{c.className} {c.section}</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Code: {c.id}</p>
+                <p className="font-bold text-[#1a1a2e] dark:text-white">{c.groupName}</p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Code: {c.id}</p>
+                  <button
+                    onClick={() => copyToClipboard(c.id)}
+                    className="text-xs text-indigo-500 hover:text-indigo-700"
+                  >
+                    {copiedCode === c.id ? '✓' : '📋'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
+          </>
+          )}
+
+          {schoolActiveTab === 'teachers' && (
+          <>
+          <h2 className="mb-4 text-xl font-extrabold text-[#1a1a2e] dark:text-white">Teachers</h2>
+
+          {teachersLoading && (
+            <div className="space-y-3">
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          )}
+
+          {!teachersLoading && schoolTeachers.length === 0 && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-gray-500 dark:text-gray-400">No teachers yet.</p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {schoolTeachers.map(t => (
+              <div key={t.id} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                <div>
+                  <p className="font-bold text-[#1a1a2e] dark:text-white">{t.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t.email}</p>
+                </div>
+                <div className="text-right">
+                  {t.groupCode ? (
+                    <>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{t.groupCode}</p>
+                        <button onClick={() => copyToClipboard(t.groupCode)} className="text-xs text-indigo-500 hover:text-indigo-700">
+                          {copiedCode === t.groupCode ? '✓' : '📋'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t.studentCount} student{t.studentCount !== 1 ? 's' : ''}</p>
+                    </>
+                  ) : (
+                    <p className="text-xs italic text-gray-400">No group yet</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
+          )}
         </div>
       </>
     )
@@ -1224,9 +1405,150 @@ async function goNext(finalScore, finalLog) {
               <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">View all your students' scores and quiz attempts</p>
             </div>
           </button>
+
+          <button
+            onClick={() => { loadGroupStudents(); setSelectedStudent(null); setPage('studentInfo') }}
+            className="overflow-hidden rounded-3xl border border-gray-200 bg-white text-left transition duration-200 hover:-translate-y-1 hover:border-indigo-500 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900"
+          >
+            <div className="flex h-28 items-center bg-gradient-to-br from-green-500 to-teal-500 px-8">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-3xl">🔍</div>
+            </div>
+            <div className="p-8">
+              <h3 className="text-xl font-extrabold text-[#1a1a2e] dark:text-white">Student Info</h3>
+              <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">Search a student and view their full profile</p>
+            </div>
+          </button>
         </div>
       </div>
     </>
+    )
+  }
+
+  // ── STUDENT INFO DASHBOARD (Teacher) ──
+  if (page === 'studentInfo') {
+    const filteredStudents = groupStudents.filter(s =>
+      s.name.toLowerCase().includes(studentSearchTerm.toLowerCase())
+    )
+
+    return (
+      <>
+        <Navbar />
+        <div className="mx-auto max-w-[900px] px-6 py-9">
+          <button
+            onClick={() => { setPage('home'); setSelectedStudent(null) }}
+            className="mb-6 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-600 transition hover:border-indigo-500 hover:text-indigo-500"
+          >
+            ← Back to Dashboard
+          </button>
+
+          <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">Student Info</h2>
+          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Search for a student in your group to view their full profile</p>
+
+          {!selectedStudent && (
+            <>
+              <input
+                type="text"
+                placeholder="Search by name..."
+                value={studentSearchTerm}
+                onChange={e => setStudentSearchTerm(e.target.value)}
+                className="mb-6 w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              />
+
+              {studentDashLoading && (
+                <div className="space-y-3">
+                  <SkeletonRow />
+                  <SkeletonRow />
+                  <SkeletonRow />
+                </div>
+              )}
+
+              {!studentDashLoading && filteredStudents.length === 0 && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+                  <p className="text-gray-500 dark:text-gray-400">No students found in your group yet.</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {filteredStudents.map(student => (
+                  <button
+                    key={student.id}
+                    onClick={() => viewStudentProfile(student)}
+                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 text-left transition hover:border-indigo-500 dark:border-gray-800 dark:bg-gray-900"
+                  >
+                    <div>
+                      <p className="font-bold text-[#1a1a2e] dark:text-white">{student.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{student.email}</p>
+                    </div>
+                    <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+                      {student.classLevel || 'No class set'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {selectedStudent && (
+            <div>
+              <button
+                onClick={() => setSelectedStudent(null)}
+                className="mb-4 text-sm font-semibold text-indigo-600 hover:underline"
+              >
+                ← Back to search
+              </button>
+
+              <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
+                <h3 className="text-xl font-extrabold text-[#1a1a2e] dark:text-white">{selectedStudent.name}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{selectedStudent.email}</p>
+
+                <div className="mt-4">
+                  <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">
+                    Self-reported class (edit if incorrect)
+                  </label>
+                  <select
+                    disabled={classLevelSaving}
+                    className="w-full max-w-[200px] rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-2.5 text-sm text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    value={selectedStudent.classLevel || ''}
+                    onChange={e => handleFixClassLevel(e.target.value)}
+                  >
+                    <option value="">Not set</option>
+                    <option value="Class 8">Class 8</option>
+                    <option value="Class 9">Class 9</option>
+                    <option value="Class 10">Class 10</option>
+                  </select>
+                </div>
+              </div>
+
+              <h3 className="mb-4 text-lg font-bold text-[#1a1a2e] dark:text-white">Quiz Attempts</h3>
+
+              {studentDashLoading && <p className="text-sm text-gray-500">Loading...</p>}
+
+              {!studentDashLoading && selectedStudentAttempts.length === 0 && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+                  <p className="text-gray-500 dark:text-gray-400">No quiz attempts yet.</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {selectedStudentAttempts.map(a => (
+                  <div key={a.id} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div>
+                      <p className="font-bold text-[#1a1a2e] dark:text-white">{a.quizId}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {a.submittedAt?.toDate ? a.submittedAt.toDate().toLocaleString() : ''}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-extrabold text-indigo-600">{a.score}/{a.totalQuestions}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{a.accuracy}%</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </>
     )
   }
   // ── ASSIGN QUIZ (Teacher) ──
@@ -1247,10 +1569,25 @@ async function goNext(finalScore, finalLog) {
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Pick a quiz and set the time window students can attempt it in</p>
 
           <div className="rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
-            {assignSuccess && (
-              <p className={`mb-4 text-sm font-medium ${assignSuccess.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>
-                {assignSuccess}
-              </p>
+            {assignSuccess && !assignSuccess.startsWith('Error') && (
+              <div className="mb-4 rounded-xl bg-green-50 p-4 dark:bg-green-950">
+                <p className="text-sm font-medium text-green-700 dark:text-green-400">{assignSuccess}</p>
+                {lastAssignedPasscode && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-green-600 dark:text-green-400">Passcode:</span>
+                    <span className="text-sm font-bold text-green-800 dark:text-green-300">{lastAssignedPasscode}</span>
+                    <button
+                      onClick={() => copyToClipboard(lastAssignedPasscode)}
+                      className="text-xs text-green-600 hover:text-green-800"
+                    >
+                      {copiedCode === lastAssignedPasscode ? '✓ Copied' : '📋 Copy'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {assignSuccess && assignSuccess.startsWith('Error') && (
+              <p className="mb-4 text-sm font-medium text-red-500">{assignSuccess}</p>
             )}
             <form onSubmit={handleCreateAssignment}>
               <div className="mb-4">
@@ -1338,7 +1675,13 @@ async function goNext(finalScore, finalLog) {
           <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">Student Analytics</h2>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">All quiz attempts from your school, ranked by score</p>
 
-          {analyticsLoading && <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>}
+         {analyticsLoading && (
+            <div className="space-y-4">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          )}
 
           {!analyticsLoading && sortedByScore.length === 0 && (
             <p className="text-sm text-gray-500 dark:text-gray-400">No quiz attempts yet from your students.</p>
@@ -1412,7 +1755,12 @@ async function goNext(finalScore, finalLog) {
           <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">📊 My Results</h2>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Your past quiz attempts and any feedback from your teacher</p>
 
-          {assignmentsLoading && <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>}
+        {assignmentsLoading && (
+            <div className="space-y-4">
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          )}
 
           {!assignmentsLoading && myPastAttempts.length === 0 && (
             <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center">
@@ -1496,7 +1844,13 @@ async function goNext(finalScore, finalLog) {
             ))}
           </div>
 
-          {leaderboardLoading && <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>}
+         {leaderboardLoading && (
+            <div className="space-y-3">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          )}
 
           {!leaderboardLoading && leaderboardData.length === 0 && (
             <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center">
@@ -1628,7 +1982,12 @@ async function goNext(finalScore, finalLog) {
             </button>
           </div>
 
-          {assignmentsLoading && <p className="text-sm text-gray-500 dark:text-gray-400">Loading assignments...</p>}
+         {assignmentsLoading && (
+            <div className="grid grid-cols-2 gap-5">
+              <SkeletonCard />
+              <SkeletonCard />
+            </div>
+          )}
 
           {!assignmentsLoading && myAssignments.length === 0 && (
             <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center">
