@@ -253,13 +253,16 @@ export async function generateTestFromNote({ driveUrl, className, subject, numQu
   return data.questions
 }
 
-export async function publishGeneratedQuiz({ quizId, className, subject, questions }) {
-  const existing = await getDoc(doc(db, 'quizzes', quizId))
-  const existingQuestions = existing.exists() ? existing.data().questions || [] : []
+export async function publishGeneratedQuiz({ noteTitle, className, subject, questions }) {
+  const quizId = `ai-${Date.now()}`
 
   await setDoc(doc(db, 'quizzes', quizId), {
     className,
     subject,
-    questions: [...existingQuestions, ...questions]
+    isAIGenerated: true,
+    sourceNoteTitle: noteTitle,
+    questions
   })
+
+  return quizId
 }

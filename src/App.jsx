@@ -632,17 +632,13 @@ async function loadQuizzesForAssign() {
     if (generatedQuestions.length === 0) return
     setPublishing(true)
     try {
-      const classNum = selectedNoteForTest.targetClassLevel.replace('Class ', '')
-      const subjectSlug = selectedNoteForTest.subject.toLowerCase().includes('math') ? 'math' : 'science'
-      const quizId = `class${classNum}-${subjectSlug}`
-
-      await publishGeneratedQuiz({
-        quizId,
+      const quizId = await publishGeneratedQuiz({
+        noteTitle: selectedNoteForTest.title,
         className: selectedNoteForTest.targetClassLevel,
         subject: selectedNoteForTest.subject,
         questions: generatedQuestions
       })
-      alert(`Published ${generatedQuestions.length} questions to ${quizId}!`)
+      alert(`Published! You can now assign this as "${selectedNoteForTest.title}" from the Assign Quiz screen.`)
       setSelectedNoteForTest(null)
       setGeneratedQuestions([])
     } catch (err) {
@@ -2015,7 +2011,9 @@ async function goNext(finalScore, finalLog) {
                 >
                   <option value="">Select a quiz...</option>
                   {allQuizzes.map(q => (
-                    <option key={q.id} value={q.id}>{q.className} — {q.subject}</option>
+                    <option key={q.id} value={q.id}>
+                      {q.isAIGenerated ? `✨ ${q.sourceNoteTitle} (AI)` : `${q.className} — ${q.subject}`}
+                    </option>
                   ))}
                 </select>
                 {assignForm.quizId && (
@@ -2223,7 +2221,13 @@ async function goNext(finalScore, finalLog) {
     return (
       <>
         <Navbar />
-        <div className="mx-auto max-w-[800px] px-6 py-9">
+        <div className="mx-auto max-w-[800px] px-6 py-9 page-fade">
+          <button
+            onClick={() => setPage('home')}
+            className="mb-6 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-600 transition hover:border-indigo-500 hover:text-indigo-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
+          >
+            ← Back to Dashboard
+          </button>
           <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">🏆 Leaderboard</h2>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Top scorers at your school</p>
 
