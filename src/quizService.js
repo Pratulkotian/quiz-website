@@ -248,7 +248,7 @@ export async function generateTestFromNote({ driveUrl, className, subject, numQu
   })
   const data = await response.json()
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to generate questions')
+  throw new Error((data.error || 'Failed to generate questions') + (data.details ? ': ' + data.details : ''))
   }
   return data.questions
 }
