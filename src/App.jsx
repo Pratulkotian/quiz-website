@@ -3,6 +3,7 @@ import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './a
 import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo, getStudentsInGroup, updateStudentClassLevel, getTeachersForSchool, updateLastActive } from './quizService'
 import { getStudentNoteDownloads, getTeacherNotes } from './notesService'
 import { getStudentVideoProgress, getVideosForTeacher } from './videoService'
+import { generateTestFromNote, publishGeneratedQuiz } from './quizService'
 import { requestGroup, getTeacherGroupStatus, generateGroupName } from './authService'
 import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejectClassRequest } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
@@ -219,6 +220,14 @@ const [authError, setAuthError] = useState('')
   const [selectedStudentVideoProgress, setSelectedStudentVideoProgress] = useState([])
   const [groupNotes, setGroupNotes] = useState([])
   const [groupVideos, setGroupVideos] = useState([])
+  const [testGenNotes, setTestGenNotes] = useState([])
+  const [testGenLoading, setTestGenLoading] = useState(false)
+  const [selectedNoteForTest, setSelectedNoteForTest] = useState(null)
+  const [generatingQuestions, setGeneratingQuestions] = useState(false)
+  const [generatedQuestions, setGeneratedQuestions] = useState([])
+  const [generateError, setGenerateError] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  const [numQuestionsToGenerate, setNumQuestionsToGenerate] = useState(5)
   const [studentDashLoading, setStudentDashLoading] = useState(false)
   const [classLevelSaving, setClassLevelSaving] = useState(false)
   const [schoolActiveTab, setSchoolActiveTab] = useState('requests')
@@ -571,6 +580,75 @@ async function loadQuizzesForAssign() {
       console.log('Could not load teachers:', err)
     }
     setTeachersLoading(false)
+  }
+  async function loadTestGenNotes() {
+    setTestGenLoading(true)
+    try {
+      const notes = await getTeacherNotes(user.groupCode)
+      setTestGenNotes(notes)
+    } catch (err) {
+      console.log('Could not load notes:', err)
+    }
+    setTestGenLoading(false)
+  }
+
+  async function handleGenerateTest(note) {
+    setSelectedNoteForTest(note)
+    setGeneratedQuestions([])
+    setGenerateError('')
+    setGeneratingQuestions(true)
+    try {
+      const questions = await generateTestFromNote({
+        driveUrl: note.fileUrl,
+        className: note.targetClassLevel,
+        subject: note.subject,
+        numQuestions: numQuestionsToGenerate
+      })
+      setGeneratedQuestions(questions)
+    } catch (err) {
+      setGenerateError(err.message)
+    }
+    setGeneratingQuestions(false)
+  }
+
+  function updateGeneratedQuestion(index, field, value) {
+    setGeneratedQuestions(prev => prev.map((q, i) => i === index ? { ...q, [field]: value } : q))
+  }
+
+  function updateGeneratedOption(qIndex, optIndex, value) {
+    setGeneratedQuestions(prev => prev.map((q, i) => {
+      if (i !== qIndex) return q
+      const newOptions = [...q.options]
+      newOptions[optIndex] = value
+      return { ...q, options: newOptions }
+    }))
+  }
+
+  function deleteGeneratedQuestion(index) {
+    setGeneratedQuestions(prev => prev.filter((_, i) => i !== index))
+  }
+
+  async function handlePublishQuiz() {
+    if (generatedQuestions.length === 0) return
+    setPublishing(true)
+    try {
+      const classNum = selectedNoteForTest.targetClassLevel.replace('Class ', '')
+      const subjectSlug = selectedNoteForTest.subject.toLowerCase().includes('math') ? 'math' : 'science'
+      const quizId = `class${classNum}-${subjectSlug}`
+
+      await publishGeneratedQuiz({
+        quizId,
+        className: selectedNoteForTest.targetClassLevel,
+        subject: selectedNoteForTest.subject,
+        questions: generatedQuestions
+      })
+      alert(`Published ${generatedQuestions.length} questions to ${quizId}!`)
+      setSelectedNoteForTest(null)
+      setGeneratedQuestions([])
+    } catch (err) {
+      alert('Error publishing: ' + err.message)
+    }
+    setPublishing(false)
   }
   async function loadSchoolDashboard() {
     setSchoolDashLoading(true)
@@ -1474,6 +1552,19 @@ async function goNext(finalScore, finalLog) {
               <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">Upload study notes for your students</p>
             </div>
           </button>
+
+          <button
+            onClick={() => { loadTestGenNotes(); setSelectedNoteForTest(null); setGeneratedQuestions([]); setPage('generateTest') }}
+            className="overflow-hidden rounded-3xl border border-gray-200 bg-white text-left transition duration-200 hover:-translate-y-1 hover:border-indigo-500 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900"
+          >
+            <div className="flex h-28 items-center bg-gradient-to-br from-violet-500 to-fuchsia-600 px-8">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-3xl">✨</div>
+            </div>
+            <div className="p-8">
+              <h3 className="text-xl font-extrabold text-[#1a1a2e] dark:text-white">Generate Test (AI)</h3>
+              <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">Auto-create quiz questions from your uploaded notes</p>
+            </div>
+          </button>
         </div>
       </div>
     </>
@@ -1505,6 +1596,171 @@ async function goNext(finalScore, finalLog) {
       <>
         <Navbar />
         <VideoStudentView user={user} onBack={() => setPage('home')} />
+      </>
+    )
+  }
+  // ── GENERATE TEST (AI) ──
+  if (page === 'generateTest') {
+    return (
+      <>
+        <Navbar />
+        <div className="mx-auto max-w-[800px] px-6 py-9">
+          <button
+            onClick={() => { setPage('home'); setSelectedNoteForTest(null); setGeneratedQuestions([]) }}
+            className="mb-6 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-600 transition hover:border-indigo-500 hover:text-indigo-500"
+          >
+            ← Back to Dashboard
+          </button>
+
+          <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">✨ Generate Test from Notes</h2>
+          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Pick a note and let AI draft quiz questions for you to review</p>
+
+          {!selectedNoteForTest && (
+            <>
+              {testGenLoading && (
+                <div className="space-y-3">
+                  <SkeletonRow />
+                  <SkeletonRow />
+                </div>
+              )}
+
+              {!testGenLoading && testGenNotes.length === 0 && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+                  <p className="text-gray-500 dark:text-gray-400">No notes uploaded yet. Upload a note first.</p>
+                </div>
+              )}
+
+              <div className="mb-6">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444] dark:text-gray-300">Number of questions to generate</label>
+                <select
+                  className="w-full max-w-[150px] rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-2.5 text-sm text-[#1a1a2e] outline-none focus:border-indigo-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  value={numQuestionsToGenerate}
+                  onChange={e => setNumQuestionsToGenerate(Number(e.target.value))}
+                >
+                  <option value={3}>3</option>
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                </select>
+              </div>
+
+              <div className="space-y-3">
+                {testGenNotes.map(note => (
+                  <div key={note.id} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div>
+                      <p className="font-bold text-[#1a1a2e] dark:text-white">{note.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{note.targetClassLevel} · {note.subject}</p>
+                    </div>
+                    <button
+                      onClick={() => handleGenerateTest(note)}
+                      className="rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 px-5 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+                    >
+                      ✨ Generate
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {selectedNoteForTest && (
+            <div>
+              <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                <p className="font-bold text-[#1a1a2e] dark:text-white">{selectedNoteForTest.title}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{selectedNoteForTest.targetClassLevel} · {selectedNoteForTest.subject}</p>
+              </div>
+
+              {generatingQuestions && (
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 p-8 text-center dark:border-violet-900 dark:bg-violet-950">
+                  <div className="mb-3 animate-pulse text-4xl">✨</div>
+                  <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">Reading your notes and generating questions...</p>
+                  <p className="mt-1 text-xs text-violet-500">This can take up to 30 seconds</p>
+                </div>
+              )}
+
+              {generateError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-950">
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-300">Could not generate questions</p>
+                  <p className="mt-1 text-xs text-red-500">{generateError}</p>
+                  <button
+                    onClick={() => handleGenerateTest(selectedNoteForTest)}
+                    className="mt-3 rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+
+              {!generatingQuestions && generatedQuestions.length > 0 && (
+                <>
+                  <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    Review and edit these {generatedQuestions.length} questions before publishing. Delete any that aren't good.
+                  </p>
+                  <div className="space-y-4">
+                    {generatedQuestions.map((q, qIndex) => (
+                      <div key={qIndex} className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Question {qIndex + 1}</span>
+                          <button
+                            onClick={() => deleteGeneratedQuestion(qIndex)}
+                            className="text-xs font-semibold text-red-500 hover:text-red-700"
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+
+                        <textarea
+                          className="mb-3 w-full rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-[#1a1a2e] outline-none focus:border-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                          rows={2}
+                          value={q.question}
+                          onChange={e => updateGeneratedQuestion(qIndex, 'question', e.target.value)}
+                        />
+
+                        <div className="mb-3 space-y-2">
+                          {q.options.map((opt, optIndex) => (
+                            <div key={optIndex} className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                checked={q.answer === opt}
+                                onChange={() => updateGeneratedQuestion(qIndex, 'answer', opt)}
+                                className="h-4 w-4"
+                              />
+                              <input
+                                className="flex-1 rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm text-[#1a1a2e] outline-none focus:border-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                                value={opt}
+                                onChange={e => {
+                                  const wasAnswer = q.answer === opt
+                                  updateGeneratedOption(qIndex, optIndex, e.target.value)
+                                  if (wasAnswer) updateGeneratedQuestion(qIndex, 'answer', e.target.value)
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mb-2 text-xs text-gray-400">Select the radio button next to the correct answer</p>
+
+                        <textarea
+                          className="w-full rounded-lg border border-gray-200 bg-indigo-50 p-3 text-xs text-gray-700 outline-none focus:border-indigo-500 dark:border-gray-700 dark:bg-indigo-950 dark:text-gray-300"
+                          rows={2}
+                          placeholder="Explanation"
+                          value={q.explanation}
+                          onChange={e => updateGeneratedQuestion(qIndex, 'explanation', e.target.value)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={handlePublishQuiz}
+                    disabled={publishing || generatedQuestions.length === 0}
+                    className="mt-6 w-full rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 py-4 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-60"
+                  >
+                    {publishing ? 'Publishing...' : `Publish ${generatedQuestions.length} Questions →`}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </>
     )
   }

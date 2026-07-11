@@ -238,3 +238,28 @@ export async function updateStudentClassLevel(studentUid, newClassLevel) {
 export async function updateLastActive(uid) {
   await updateDoc(doc(db, 'users', uid), { lastActive: Timestamp.now() })
 }
+// ── AI TEST GENERATION ──
+
+export async function generateTestFromNote({ driveUrl, className, subject, numQuestions }) {
+  const response = await fetch('/api/generate-test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ driveUrl, className, subject, numQuestions })
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to generate questions')
+  }
+  return data.questions
+}
+
+export async function publishGeneratedQuiz({ quizId, className, subject, questions }) {
+  const existing = await getDoc(doc(db, 'quizzes', quizId))
+  const existingQuestions = existing.exists() ? existing.data().questions || [] : []
+
+  await setDoc(doc(db, 'quizzes', quizId), {
+    className,
+    subject,
+    questions: [...existingQuestions, ...questions]
+  })
+}
