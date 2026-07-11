@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './authService'
 import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo, getStudentsInGroup, updateStudentClassLevel, getTeachersForSchool, updateLastActive } from './quizService'
+import { getStudentNoteDownloads, getTeacherNotes } from './notesService'
+import { getStudentVideoProgress, getVideosForTeacher } from './videoService'
 import { requestGroup, getTeacherGroupStatus, generateGroupName } from './authService'
 import { getPendingClassRequests, getApprovedClasses, approveClassRequest, rejectClassRequest } from './quizService'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
@@ -213,6 +215,10 @@ const [authError, setAuthError] = useState('')
   const [studentSearchTerm, setStudentSearchTerm] = useState('')
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [selectedStudentAttempts, setSelectedStudentAttempts] = useState([])
+  const [selectedStudentDownloads, setSelectedStudentDownloads] = useState([])
+  const [selectedStudentVideoProgress, setSelectedStudentVideoProgress] = useState([])
+  const [groupNotes, setGroupNotes] = useState([])
+  const [groupVideos, setGroupVideos] = useState([])
   const [studentDashLoading, setStudentDashLoading] = useState(false)
   const [classLevelSaving, setClassLevelSaving] = useState(false)
   const [schoolActiveTab, setSchoolActiveTab] = useState('requests')
@@ -527,10 +533,20 @@ async function loadQuizzesForAssign() {
     setSelectedStudent(student)
     setStudentDashLoading(true)
     try {
-      const attempts = await getStudentAttempts(student.id)
+      const [attempts, downloads, videoProgress, allNotes, allVideos] = await Promise.all([
+        getStudentAttempts(student.id),
+        getStudentNoteDownloads(student.id),
+        getStudentVideoProgress(student.id),
+        getTeacherNotes(user.groupCode),
+        getVideosForTeacher(user.groupCode)
+      ])
       setSelectedStudentAttempts(attempts)
+      setSelectedStudentDownloads(downloads)
+      setSelectedStudentVideoProgress(videoProgress)
+      setGroupNotes(allNotes)
+      setGroupVideos(allVideos)
     } catch (err) {
-      console.log('Could not load student attempts:', err)
+      console.log('Could not load student profile:', err)
     }
     setStudentDashLoading(false)
   }
@@ -1623,12 +1639,12 @@ async function goNext(finalScore, finalLog) {
               {studentDashLoading && <p className="text-sm text-gray-500">Loading...</p>}
 
               {!studentDashLoading && selectedStudentAttempts.length === 0 && (
-                <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+                <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
                   <p className="text-gray-500 dark:text-gray-400">No quiz attempts yet.</p>
                 </div>
               )}
 
-              <div className="space-y-3">
+              <div className="mb-8 space-y-3">
                 {selectedStudentAttempts.map(a => (
                   <div key={a.id} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
                     <div>
@@ -1644,6 +1660,50 @@ async function goNext(finalScore, finalLog) {
                   </div>
                 ))}
               </div>
+
+              <h3 className="mb-4 text-lg font-bold text-[#1a1a2e] dark:text-white">📄 Notes Downloaded</h3>
+
+              {groupNotes.length === 0 ? (
+                <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+                  <p className="text-gray-500 dark:text-gray-400">No notes uploaded yet.</p>
+                </div>
+              ) : (
+                <div className="mb-8 space-y-2">
+                  {groupNotes.map(note => {
+                    const downloaded = selectedStudentDownloads.some(d => d.noteId === note.id)
+                    return (
+                      <div key={note.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                        <p className="text-sm font-semibold text-[#1a1a2e] dark:text-white">{note.title}</p>
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${downloaded ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {downloaded ? '✅ Downloaded' : '✕ Not yet'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <h3 className="mb-4 text-lg font-bold text-[#1a1a2e] dark:text-white">🎬 Videos Completed</h3>
+
+              {groupVideos.length === 0 ? (
+                <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+                  <p className="text-gray-500 dark:text-gray-400">No videos uploaded yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {groupVideos.map(video => {
+                    const completed = selectedStudentVideoProgress.some(p => p.videoId === video.id)
+                    return (
+                      <div key={video.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                        <p className="text-sm font-semibold text-[#1a1a2e] dark:text-white">{video.title}</p>
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${completed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {completed ? '✅ Completed' : '✕ Not yet'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

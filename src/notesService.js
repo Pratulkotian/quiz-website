@@ -97,3 +97,10 @@ export async function deleteNote(noteId) {
 
   await deleteDoc(noteRef);
 }
+
+// Get all notes a specific student has downloaded
+export async function getStudentNoteDownloads(studentUid) {
+  const q = query(collection(db, "noteDownloads"), where("studentUid", "==", studentUid));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
