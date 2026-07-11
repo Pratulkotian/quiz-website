@@ -150,12 +150,15 @@ export default function VideoStudentView({ user, onBack }) {
               />
             </div>
           ) : isGoogleDriveUrl(activeVideo.videoUrl) ? (
-            <video
-              className="w-full rounded-xl"
-              src={getGoogleDriveDirectUrl(activeVideo.videoUrl)}
-              controls
-              onEnded={() => handleVideoEnded(activeVideo)}
-            />
+            <div className="rounded-xl bg-gray-50 p-10 text-center dark:bg-gray-800">
+              <div className="mb-4 text-4xl">🎬</div>
+              <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+                This video is hosted on Google Drive and opens in a new tab for the best playback experience.
+              </p>
+              <a href={activeVideo.videoUrl} target="_blank" rel="noopener noreferrer" className="inline-block rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 px-6 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg">
+                Watch on Google Drive ↗
+              </a>
+            </div>
           ) : (
             <video
               className="w-full rounded-xl"
@@ -165,7 +168,7 @@ export default function VideoStudentView({ user, onBack }) {
             />
           )}
 
-          {(isYoutubeUrl(activeVideo.videoUrl) || isStreamableUrl(activeVideo.videoUrl) || isVimeoUrl(activeVideo.videoUrl)) && !completedIds.has(activeVideo.id) && (
+          {(isYoutubeUrl(activeVideo.videoUrl) || isGoogleDriveUrl(activeVideo.videoUrl) || isStreamableUrl(activeVideo.videoUrl) || isVimeoUrl(activeVideo.videoUrl)) && !completedIds.has(activeVideo.id) && (
             <button
               onClick={() => handleVideoEnded(activeVideo)}
               className="mt-3 rounded-lg bg-green-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-600"
