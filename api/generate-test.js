@@ -1,4 +1,5 @@
-import pdf from 'pdf-parse'
+import * as pdfParseModule from 'pdf-parse'
+const pdf = pdfParseModule.default || pdfParseModule
 
 function getGoogleDriveDirectUrl(url) {
   try {
