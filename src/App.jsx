@@ -233,6 +233,8 @@ const [authError, setAuthError] = useState('')
   const [schoolActiveTab, setSchoolActiveTab] = useState('requests')
   const [schoolTeachers, setSchoolTeachers] = useState([])
   const [teachersLoading, setTeachersLoading] = useState(false)
+  const [schoolLeaderboard, setSchoolLeaderboard] = useState([])
+  const [schoolLeaderboardLoading, setSchoolLeaderboardLoading] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -571,6 +573,16 @@ async function loadQuizzesForAssign() {
     }
     setClassLevelSaving(false)
   }
+  async function loadSchoolLeaderboard() {
+    setSchoolLeaderboardLoading(true)
+    try {
+      const data = await getLeaderboard(user.schoolCode, null)
+      setSchoolLeaderboard(data)
+    } catch (err) {
+      console.log('Could not load school leaderboard:', err)
+    }
+    setSchoolLeaderboardLoading(false)
+  }
   async function loadSchoolTeachers() {
     setTeachersLoading(true)
     try {
@@ -673,9 +685,12 @@ async function loadQuizzesForAssign() {
   }
 
   async function handleRejectClass(requestId) {
+    const reason = prompt('Optional: add a reason for rejecting this request (students/teacher will see this)')
+    if (reason === null) return // user clicked Cancel
+
     setClassActionLoading(requestId)
     try {
-      await rejectClassRequest(requestId)
+      await rejectClassRequest(requestId, reason)
       await loadSchoolDashboard()
     } catch (err) {
       alert('Error: ' + err.message)
@@ -1177,12 +1192,13 @@ async function goNext(finalScore, finalLog) {
   // ── HOME (School) ──
   if (page === 'home' && user?.role === 'school') {
     if (pendingClassRequests.length === 0 && approvedClasses.length === 0 && !schoolDashLoading) loadSchoolDashboard()
+    if (schoolTeachers.length === 0 && !teachersLoading) loadSchoolTeachers()
 
     return (
       <>
         <Navbar />
         <div className="mx-auto max-w-[1000px] px-6 py-9">
-          <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 p-10 text-white">
+         <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 p-10 text-white">
             <h1 className="mb-2 text-3xl font-extrabold">School Dashboard 🏫</h1>
             <p className="mb-3 text-[15px] opacity-90">Review class requests from teachers at your school.</p>
             <div className="flex items-center gap-2">
@@ -1195,18 +1211,29 @@ async function goNext(finalScore, finalLog) {
                 {copiedCode === user?.schoolCode ? '✓' : '📋'}
               </button>
             </div>
+            <div className="absolute right-10 top-1/2 -translate-y-1/2 text-7xl opacity-20">🏫</div>
           </div>
 
-          <div className="mb-8 grid grid-cols-2 gap-4">
+          <div className="mb-8 grid grid-cols-4 gap-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-100 dark:bg-yellow-950">⏳</div>
               <div className="text-3xl font-extrabold text-[#1a1a2e] dark:text-white">{pendingClassRequests.length}</div>
               <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">Pending Requests</div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 dark:bg-green-950">🏛️</div>
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950">🏛️</div>
               <div className="text-3xl font-extrabold text-[#1a1a2e] dark:text-white">{approvedClasses.length}</div>
               <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">Active Classes</div>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-pink-100 dark:bg-pink-950">👩‍🏫</div>
+              <div className="text-3xl font-extrabold text-[#1a1a2e] dark:text-white">{schoolTeachers.length}</div>
+              <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">Teachers</div>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 dark:bg-green-950">🎓</div>
+              <div className="text-3xl font-extrabold text-[#1a1a2e] dark:text-white">{schoolTeachers.reduce((sum, t) => sum + (t.studentCount || 0), 0)}</div>
+              <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">Total Students</div>
             </div>
           </div>
 
@@ -1228,6 +1255,12 @@ async function goNext(finalScore, finalLog) {
               className={`rounded-full px-4 py-2 text-xs font-semibold transition ${schoolActiveTab === 'teachers' ? 'bg-indigo-500 text-white' : 'border border-gray-200 bg-white text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300'}`}
             >
               👩‍🏫 Teachers
+            </button>
+            <button
+              onClick={() => { setSchoolActiveTab('leaderboard'); loadSchoolLeaderboard() }}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${schoolActiveTab === 'leaderboard' ? 'bg-indigo-500 text-white' : 'border border-gray-200 bg-white text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300'}`}
+            >
+              🏆 Leaderboard
             </button>
           </div>
 
@@ -1353,6 +1386,49 @@ async function goNext(finalScore, finalLog) {
           </div>
           </>
           )}
+
+          {schoolActiveTab === 'leaderboard' && (
+          <>
+          <h2 className="mb-4 text-xl font-extrabold text-[#1a1a2e] dark:text-white">🏆 School-Wide Leaderboard</h2>
+          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Top scorers across all classes and teachers at your school</p>
+
+          {schoolLeaderboardLoading && (
+            <div className="space-y-3">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          )}
+
+          {!schoolLeaderboardLoading && schoolLeaderboard.length === 0 && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-gray-500 dark:text-gray-400">No scores yet.</p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {schoolLeaderboard.map((entry, i) => (
+              <div key={entry.id} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                <div className="flex items-center gap-4">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${
+                    i === 0 ? 'bg-yellow-100 text-yellow-700' : i === 1 ? 'bg-gray-200 text-gray-700' : i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-indigo-50 text-indigo-600'
+                  }`}>
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                  </div>
+                  <div>
+                    <p className="font-bold text-[#1a1a2e] dark:text-white">{entry.studentName}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{entry.quizId}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-extrabold text-indigo-600">{entry.score}/{entry.totalQuestions}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{entry.accuracy}%</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
+          )}
         </div>
       </>
     )
@@ -1389,7 +1465,10 @@ async function goNext(finalScore, finalLog) {
 
             {myClassStatus?.status === 'rejected' && (
               <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                Your last request for {myClassStatus.className} {myClassStatus.section} was rejected. You can submit a new request below.
+                <p>Your last request was rejected. You can submit a new request below.</p>
+                {myClassStatus.rejectionReason && (
+                  <p className="mt-2 text-xs italic">Reason: "{myClassStatus.rejectionReason}"</p>
+                )}
               </div>
             )}
 

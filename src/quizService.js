@@ -191,9 +191,10 @@ export async function approveClassRequest(request) {
   })
 }
 
-export async function rejectClassRequest(requestId) {
+export async function rejectClassRequest(requestId, reason) {
   await updateDoc(doc(db, 'classRequests', requestId), {
-    status: 'rejected'
+    status: 'rejected',
+    rejectionReason: reason || ''
   })
 }
 

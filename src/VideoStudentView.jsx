@@ -91,24 +91,24 @@ export default function VideoStudentView({ user, onBack }) {
     <div className="mx-auto max-w-[900px] px-6 py-9">
       <button
         onClick={onBack}
-        className="mb-6 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-600 transition hover:border-indigo-500 hover:text-indigo-500"
+        className="mb-6 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-[#1a1text-gray-600 dark:text-gray-400a2e] dark:text-white transition hover:border-indigo-500 hover:text-indigo-500"
       >
         ← Back to Home
       </button>
 
-      <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white">🎬 My Videos</h2>
+      <h2 className="mb-1 text-2xl font-extrabold text-[#1a1a2e] dark:text-white dark:text-white">🎬 My Videos</h2>
       <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
         Videos for {user.classLevel} — {completedIds.size}/{videos.length} completed
       </p>
 
       {/* Active Video Player */}
       {activeVideo && (
-        <div className="mb-8 rounded-3xl border border-indigo-200 bg-white p-6 shadow-lg dark:border-indigo-900 dark:bg-gray-900">
+        <div className="mb-8 rounded-3xl border border-indigo-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900 shadow-lg dark:border-indigo-900 dark:bg-gray-900">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-bold text-[#1a1a2e] dark:text-white">{activeVideo.title}</h3>
+            <h3 className="font-bold text-[#1a1a2e] dark:text-white dark:text-white">{activeVideo.title}</h3>
             <button
               onClick={() => setActiveVideo(null)}
-              className="text-sm text-gray-400 hover:text-gray-600"
+              className="text-sm text-gray-400 hover:text-[#1a1text-gray-600 dark:text-gray-400a2e] dark:text-white"
             >
               ✕ Close
             </button>
@@ -117,7 +117,7 @@ export default function VideoStudentView({ user, onBack }) {
           {isYoutubeUrl(activeVideo.videoUrl) ? (
             <div className="rounded-xl bg-gray-50 p-10 text-center dark:bg-gray-800">
               <div className="mb-4 text-4xl">▶️</div>
-              <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+              <p className="mb-4 text-sm text-[#1a1text-gray-600 dark:text-gray-400a2e] dark:text-white dark:text-gray-300">
                 This video opens on YouTube for the best playback experience.
               </p>
               
@@ -152,7 +152,7 @@ export default function VideoStudentView({ user, onBack }) {
           ) : isGoogleDriveUrl(activeVideo.videoUrl) ? (
             <div className="rounded-xl bg-gray-50 p-10 text-center dark:bg-gray-800">
               <div className="mb-4 text-4xl">🎬</div>
-              <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+              <p className="mb-4 text-sm text-[#1a1text-gray-600 dark:text-gray-400a2e] dark:text-white dark:text-gray-300">
                 This video is hosted on Google Drive and opens in a new tab for the best playback experience.
               </p>
               <a href={activeVideo.videoUrl} target="_blank" rel="noopener noreferrer" className="inline-block rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 px-6 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg">
@@ -224,7 +224,7 @@ export default function VideoStudentView({ user, onBack }) {
                   {done ? '✅' : '▶️'}
                 </div>
                 <div>
-                  <p className="font-bold text-[#1a1a2e] dark:text-white">{v.title}</p>
+                  <p className="font-bold text-[#1a1a2e] dark:text-white dark:text-white">{v.title}</p>
                   <div className="mt-0.5 flex gap-2">
                     <span className="text-xs text-gray-500 dark:text-gray-400">{v.subject}</span>
                     {done && <span className="text-xs font-semibold text-green-600">Completed</span>}
