@@ -258,7 +258,8 @@ const [authForm, setAuthForm] = useState({
     isNewSchool: false,
     contactPhone: '',
     address: '',
-    proposedSchoolCode: ''
+    proposedSchoolCode: '',
+    udiseCode: ''
   })
 
   useEffect(() => {
@@ -326,9 +327,12 @@ useEffect(() => {
         address: authForm.address,
         email: authForm.email,
         password: authForm.password,
-        proposedSchoolCode: authForm.proposedSchoolCode
+        proposedSchoolCode: authForm.proposedSchoolCode,
+        udiseCode: authForm.udiseCode
       })
-      setPage('schoolPending')
+      alert(`Success! Your school "${authForm.schoolName}" is now active. Please sign in.`)
+      setAuthForm({ name: '', email: '', password: '', role: 'student', schoolCode: '', groupCode: '', classLevel: '', schoolName: '', isNewSchool: false, contactPhone: '', address: '', proposedSchoolCode: '', udiseCode: '' })
+      setPage('signin')
     } catch (err) {
       setAuthError(err.message)
     }
@@ -371,17 +375,6 @@ async function handleSignUp(e) {
 
       updateLastActive(loggedInUser.uid)
 
-      if (loggedInUser.role === 'school') {
-        const status = await getSchoolStatus(loggedInUser.schoolCode)
-        if (status === 'pending') {
-          setUser(loggedInUser)
-          setPage('schoolStillPending')
-          setAuthLoading(false)
-          return
-        }
-      }
-
-      // Fetch the real school name for anyone with a schoolCode (used in group name generation)
       if (loggedInUser.schoolCode) {
         const schoolInfo = await getSchoolInfo(loggedInUser.schoolCode)
         loggedInUser.schoolName = schoolInfo?.name || loggedInUser.schoolCode
@@ -1025,6 +1018,14 @@ async function goNext(finalScore, finalLog) {
                   onChange={e => setAuthForm({ ...authForm, address: e.target.value })}
                   required />
               </div>
+              <div className="mb-4">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">UDISE Code</label>
+                <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="11-digit UDISE code" maxLength={11}
+                  value={authForm.udiseCode}
+                  onChange={e => setAuthForm({ ...authForm, udiseCode: e.target.value })}
+                  required />
+                <p className="mt-1.5 text-xs text-gray-500">Your school's official 11-digit UDISE identification code</p>
+              </div>
               <div className="mb-6">
                 <label className="mb-1.5 block text-[13px] font-semibold text-[#444]">Choose a school code</label>
                 <input className="w-full rounded-[10px] border-[1.5px] border-[#e8eaf0] bg-[#fafafa] px-4 py-3 text-[15px] text-[#1a1a2e] outline-none transition-all duration-200 focus:border-indigo-500 focus:bg-white" type="text" placeholder="e.g. PRASTUTI2026"
@@ -1032,31 +1033,7 @@ async function goNext(finalScore, finalLog) {
                   onChange={e => setAuthForm({ ...authForm, proposedSchoolCode: e.target.value })}
                   required />
               </div>
-              <div className="mb-4 rounded-xl bg-yellow-50 p-4 text-xs text-yellow-800">
-                📋 Your school registration will be reviewed before you can access your dashboard. You'll be notified once approved.
-              </div>
             </>
-          )}
-
-         {authForm.role === 'teacher' && (
-            <div className="mb-4">
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setAuthForm({ ...authForm, isNewSchool: true })}
-                  className={`rounded-[10px] border-[1.5px] py-2.5 text-xs font-semibold transition-all duration-200 ${authForm.isNewSchool ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-[#e8eaf0] bg-[#fafafa] text-[#666]'}`}
-                >
-                  ➕ Create new school
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthForm({ ...authForm, isNewSchool: false })}
-                  className={`rounded-[10px] border-[1.5px] py-2.5 text-xs font-semibold transition-all duration-200 ${!authForm.isNewSchool ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-[#e8eaf0] bg-[#fafafa] text-[#666]'}`}
-                >
-                  🔗 Join existing school
-                </button>
-              </div>
-            </div>
           )}
 
           {authForm.role === 'teacher' && authForm.isNewSchool && (

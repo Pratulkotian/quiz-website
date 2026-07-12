@@ -3,7 +3,7 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut
 } from 'firebase/auth'
-import { doc, setDoc, getDoc, getDocs, collection, addDoc, query, where } from 'firebase/firestore'
+import { doc, setDoc, getDoc, getDocs, collection, addDoc, query, where, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 
 // SIGN UP — creates auth account + user profile document
@@ -89,8 +89,18 @@ export async function signIn({ email, password }) {
 
 // SIGN OUT
 // SCHOOL SIGNUP — creates auth account + a pending request (not a real school yet)
-export async function requestSchool({ schoolName, contactName, contactPhone, address, email, password, proposedSchoolCode }) {
+export async function requestSchool({ schoolName, contactName, contactPhone, address, email, password, proposedSchoolCode, udiseCode }) {
   const code = proposedSchoolCode.trim().toUpperCase()
+  const udise = udiseCode.trim()
+
+  // Verify the UDISE code exists and hasn't been used yet
+  const udiseSnap = await getDoc(doc(db, 'validUdiseCodes', udise))
+  if (!udiseSnap.exists()) {
+    throw new Error('Invalid UDISE code. Please check with your school administration.')
+  }
+  if (udiseSnap.data().used) {
+    throw new Error('This UDISE code has already been used to register a school.')
+  }
 
   // Block duplicate school names (case-insensitive)
   const schoolsSnap = await getDocs(collection(db, 'schools'))
@@ -110,15 +120,20 @@ export async function requestSchool({ schoolName, contactName, contactPhone, add
   const userCredential = await createUserWithEmailAndPassword(auth, email, password)
   const user = userCredential.user
 
-  await setDoc(doc(db, 'schoolRequests', user.uid), {
-    schoolName,
-    contactName,
-    contactPhone,
+  // Create the school immediately — no admin approval needed
+  await setDoc(doc(db, 'schools', code), {
+    name: schoolName,
     address,
-    proposedSchoolCode: code,
-    authUid: user.uid,
-    status: 'pending',
-    createdAt: new Date().toISOString()
+    contactPhone,
+    schoolUid: user.uid,
+    udiseCode: udise,
+    approvedAt: new Date().toISOString()
+  })
+
+  // Mark the UDISE code as used
+  await updateDoc(doc(db, 'validUdiseCodes', udise), {
+    used: true,
+    usedBySchoolCode: code
   })
 
   await setDoc(doc(db, 'users', user.uid), {
