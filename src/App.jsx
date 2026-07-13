@@ -265,11 +265,9 @@ const [authForm, setAuthForm] = useState({
   })
 
   useEffect(() => {
-    console.log('DEBUG db value at effect start:', db)
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          console.log('DEBUG db value inside callback:', db)
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
           if (userDoc.exists()) {
             const restoredUser = { uid: firebaseUser.uid, ...userDoc.data() }
