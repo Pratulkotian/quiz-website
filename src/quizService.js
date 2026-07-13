@@ -4,6 +4,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   getDoc,
   getDocs,
   query,
@@ -12,9 +13,6 @@ import {
   limit,
   Timestamp
 } from 'firebase/firestore'
-import { db } from './firebase'
-
-// ── SCHOOL INFO ──
 
 export async function getSchoolInfo(schoolCode) {
   const snap = await getDoc(doc(db, 'schools', schoolCode))
@@ -266,4 +264,8 @@ export async function publishGeneratedQuiz({ noteTitle, className, subject, ques
   })
 
   return quizId
+}
+
+export async function deleteAssignment(assignmentId) {
+  await deleteDoc(doc(db, 'assignments', assignmentId))
 }

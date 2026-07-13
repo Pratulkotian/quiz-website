@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { signUp, signIn, signOutUser, requestSchool, getSchoolStatus } from './authService'
-import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo, getStudentsInGroup, updateStudentClassLevel, getTeachersForSchool, updateLastActive } from './quizService'
+import { getQuiz, submitAttempt, getAllQuizzes, createAssignment, getSchoolAttempts, getLeaderboard, getAssignmentsForSchool, getAssignmentsForGroup, getAssignmentStatus, getStudentAttempts, getSchoolInfo, getStudentsInGroup, updateStudentClassLevel, getTeachersForSchool, updateLastActive, deleteAssignment } from './quizService'
 import { getStudentNoteDownloads, getTeacherNotes } from './notesService'
 import { getStudentVideoProgress, getVideosForTeacher } from './videoService'
 import { generateTestFromNote, publishGeneratedQuiz } from './quizService'
@@ -194,6 +194,8 @@ const [authError, setAuthError] = useState('')
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignSuccess, setAssignSuccess] = useState('')
   const [lastAssignedPasscode, setLastAssignedPasscode] = useState('')
+  const [teacherAssignments, setTeacherAssignments] = useState([])
+  const [assignmentsListLoading, setAssignmentsListLoading] = useState(false)
   const [studentAttempts, setStudentAttempts] = useState([])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [feedbackDrafts, setFeedbackDrafts] = useState({})
@@ -463,6 +465,26 @@ async function loadMyAssignments() {
       setQuizError('Could not load quiz questions. Please try again.')
     }
     setQuizLoading(false)
+  }
+  async function loadTeacherAssignments() {
+    setAssignmentsListLoading(true)
+    try {
+      const assignments = await getAssignmentsForGroup(user.groupCode)
+      setTeacherAssignments(assignments)
+    } catch (err) {
+      console.log('Could not load assignments:', err)
+    }
+    setAssignmentsListLoading(false)
+  }
+
+  async function handleDeleteAssignment(assignmentId) {
+    if (!confirm('Delete this assignment? Students will no longer be able to access it.')) return
+    try {
+      await deleteAssignment(assignmentId)
+      await loadTeacherAssignments()
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
   }
 async function loadQuizzesForAssign() {
     try {
@@ -2021,6 +2043,7 @@ async function goNext(finalScore, finalLog) {
   // ── ASSIGN QUIZ (Teacher) ──
   if (page === 'assign') {
     if (allQuizzes.length === 0) loadQuizzesForAssign()
+    if (teacherAssignments.length === 0 && !assignmentsListLoading) loadTeacherAssignments()
     return (
       <>
         <Navbar />
@@ -2118,6 +2141,46 @@ async function goNext(finalScore, finalLog) {
                 {assignLoading ? 'Assigning...' : 'Assign Quiz →'}
               </button>
             </form>
+          </div>
+
+          <h3 className="mb-4 mt-8 text-lg font-bold text-[#1a1a2e] dark:text-white">Your Assignments</h3>
+
+          {assignmentsListLoading && (
+            <div className="space-y-3">
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          )}
+
+          {!assignmentsListLoading && teacherAssignments.length === 0 && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-gray-500 dark:text-gray-400">No assignments yet.</p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {teacherAssignments.map(a => {
+              const quizInfo = allQuizzesLookup[a.quizId]
+              return (
+                <div key={a.id} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                  <div>
+                    <p className="font-bold text-[#1a1a2e] dark:text-white">
+                      {quizInfo?.isAIGenerated ? `✨ ${quizInfo.sourceNoteTitle} (AI)` : quizInfo ? `${quizInfo.className} — ${quizInfo.subject}` : a.quizId}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {a.startTime?.toDate ? a.startTime.toDate().toLocaleString() : ''} → {a.endTime?.toDate ? a.endTime.toDate().toLocaleString() : ''}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">Passcode: {a.passcode}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteAssignment(a.id)}
+                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       </>
@@ -2904,16 +2967,6 @@ if (page === "quiz") {
             className="w-full rounded-xl border-2 border-indigo-500 bg-indigo-50 py-4 font-bold text-indigo-600 transition hover:bg-indigo-100"
           >
             📖 Review Answers & Explanations
-          </button>
-
-          <button
-            onClick={() => {
-              setSelectedClass(quizCategory.includes("class8") ? "class8" : quizCategory.includes("class9") ? "class9" : "class10")
-              setPage("subjects")
-            }}
-            className="mt-3 w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 py-4 text-white font-bold transition hover:-translate-y-1 hover:shadow-xl"
-          >
-            Try Another Subject →
           </button>
 
           <button onClick={goHome} className="mt-3 w-full rounded-xl border border-gray-300 bg-white py-4 font-semibold text-gray-700 transition hover:border-indigo-500 hover:text-indigo-600">
