@@ -1117,7 +1117,7 @@ async function goNext(finalScore, finalLog) {
 
  // ── NAVBAR (shared) ──
   const Navbar = () => (
-    <nav className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-8 dark:border-gray-800 dark:bg-gray-900">
+    <nav className="sticky top-0 z-[100] flex h-16 items-center justify-between border-b border-gray-200 bg-white px-8 dark:border-gray-800 dark:bg-gray-900">
       <div className="flex cursor-pointer items-center gap-3" onClick={goHome}>
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 text-xl">
           🧠
