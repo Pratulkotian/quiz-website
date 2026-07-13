@@ -1977,7 +1977,7 @@ async function goNext(finalScore, finalLog) {
                 </div>
               ) : (
                 <div className="mb-8 space-y-2">
-                  {groupNotes.map(note => {
+                  {groupNotes.filter(note => note.targetClassLevel === selectedStudent.classLevel).map(note => {
                     const downloaded = selectedStudentDownloads.some(d => d.noteId === note.id)
                     return (
                       <div key={note.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
@@ -1999,7 +1999,7 @@ async function goNext(finalScore, finalLog) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {groupVideos.map(video => {
+                  {groupVideos.filter(video => video.targetClassLevel === selectedStudent.classLevel).map(video => {
                     const completed = selectedStudentVideoProgress.some(p => p.videoId === video.id)
                     return (
                       <div key={video.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">

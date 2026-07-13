@@ -2,6 +2,14 @@ import { extractText, getDocumentProxy } from 'unpdf'
 
 function getGoogleDriveDirectUrl(url) {
   try {
+    // Google Docs document link -> export as PDF directly
+    if (url.includes('docs.google.com/document')) {
+      const match = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)
+      if (match && match[1]) {
+        return `https://docs.google.com/document/d/${match[1]}/export?format=pdf`
+      }
+    }
+    // Regular Google Drive file link
     const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
     if (match && match[1]) {
       return `https://drive.google.com/uc?export=download&id=${match[1]}`
