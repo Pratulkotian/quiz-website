@@ -13,6 +13,7 @@ import {
   limit,
   Timestamp
 } from 'firebase/firestore'
+import { db } from './firebase'
 
 export async function getSchoolInfo(schoolCode) {
   const snap = await getDoc(doc(db, 'schools', schoolCode))
